@@ -21,6 +21,7 @@ mod graph;
 mod index;
 mod page;
 mod search;
+mod seed;
 mod store;
 
 pub use anchors::{AnchorState, AnchorVerdict, CheckReport, anchor_spec, check_page};
@@ -33,6 +34,11 @@ pub use graph::{
 pub use index::{Index, IndexHit, SearchFilters, SyncStats};
 pub use page::{Anchor, Frontmatter, Kind, Page, rev_of, section_of, slugify};
 pub use search::{Hit, ReadOutcome, SearchOutcome, Section};
+pub use seed::{
+    ManifestKind, Package, PageAnswer, PagePlan, PageReport, PageRequest, PageWriter,
+    StructurePlan, StructureReport, plan_pages, plan_structure, scan, seed_pages, seed_structure,
+    subjects_in_use,
+};
 pub use store::{
     AnchorInput, SaveRequest, SaveResult, Store, StorePaths, default_root, now_rfc3339,
     resolve_root,

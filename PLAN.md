@@ -68,12 +68,14 @@ share one pool instead of forking it.
 3. **Harness integration** — done: `mcp` (initialize, tools/list, tools/call, seven
    tools, `--prefix` for a harness that owns `memory_*`) and `install` for
    claude/codex/copilot/cursor/gemini/agents, merging into existing configuration.
-4. **Seeding** — free structure pass over manifests and READMEs (no model), priced
-   model pass through an OpenAI-compatible endpoint, plan-first with an explicit
-   cost, resumable and stoppable.
+4. **Seeding** — done: free structure pass over manifests and READMEs (Cargo, npm,
+   pyproject, Go; bounded walk; anchors on the files it read; one `depends` edge per
+   dependency), and the priced page pass through an OpenAI-compatible endpoint,
+   plan-first with an explicit estimate and a `--yes` gate.
 5. **Benchmark** — 4 arms (no tool, Factored Harness LLM Wiki, graphify, wayfinder) ×
    the 6 harness cases × 3 repeats against `kornerstone-dev/qwen38-27b-fp8`, in a
    fresh checkout, with the same ground-truth guard and the charged-per-answer view.
+   Next.
 6. **Docs** — README quickstart, command reference, architecture, and the measured
    results.
 

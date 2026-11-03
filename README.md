@@ -9,10 +9,12 @@ write, find, read, verify, and draw them.
 
 ```console
 $ wayfinder init
-$ wayfinder save --title "Rate limits" --body - --anchor src/limiter.rs:42
+$ wayfinder seed --structure            # one page per package, from files only
 $ wayfinder search "how many requests per second"
 $ wayfinder read rate-limits --section Throughput
+$ wayfinder save --title "Rate limits" --body - --anchor src/limiter.rs:42
 $ wayfinder check
+$ wayfinder graph --format html --out graph.html
 ```
 
 ## Why it pays
@@ -38,6 +40,10 @@ the workspace at all. Wayfinder is that feature set with the harness left out.
 - **A prompt digest.** `digest` prints the block that tells a session the pool exists.
 - **A graph.** `graph --format svg|html|json|dot|mermaid` draws pages, subjects, cited
   paths, and the relations between them.
+- **A pool on day one.** `seed --structure` writes one pointer page per package from
+  its manifest and README — no model, no tokens. `seed --pages` replaces those pointers
+  with pages a model wrote from reading the code, behind a plan that states the spend
+  first.
 
 ## Harnesses
 
@@ -64,12 +70,17 @@ snippet, merging into what is already there:
 Milestone 1 was the store and the terminal surface. Milestone 2 adds the MCP server and
 `install`, so a harness gets typed tools and an instruction block from one command.
 
-Next: `seed` (the free structure pass and the priced model pass), then the benchmark
-against no tool, the harness LLM Wiki, and graphify. See [PLAN.md](PLAN.md).
+Milestone 3 adds `seed`: the free structure pass (Cargo, npm, pyproject, and Go
+manifests; 18 skipped directory names; anchors on the manifest and README; one
+`depends` edge per declared dependency) and the priced page pass (plan, estimate,
+`--yes` gate, per-package failure reporting, provider-reported token spend).
+
+Next: the benchmark against no tool, the harness LLM Wiki, and graphify. See
+[PLAN.md](PLAN.md).
 
 ## Development
 
 ```console
-$ cargo test          # 40 tests: store, index, search, anchors, graph, CLI, MCP, install
+$ cargo test          # 51 tests: store, index, search, anchors, graph, CLI, MCP, install, seed
 $ cargo build --release
 ```

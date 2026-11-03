@@ -436,34 +436,56 @@ pub fn slugify(title: &str) -> String {
     }
 }
 
-/// Normalize a subject to `namespace:key`, lowercasing the namespace and
-/// trimming separators a writer may have doubled.
+/// Normalize a subject to `namespace:key`.
+///
+/// The namespace is lowercased and a doubled separator is collapsed, but a
+/// `path:` subject keeps its separators: it names a directory, not a dotted key.
 pub fn normalize_subject(raw: &str) -> String {
     let trimmed = strip_quotes(raw).trim();
     if trimmed.is_empty() {
         return String::new();
     }
-    let normalized = trimmed.replace(":/", ":").replace('/', ":");
-    let normalized = normalized.trim_matches(':').replace("::", ":");
-    match normalized.split_once(':') {
-        Some((namespace, key)) if !key.is_empty() => {
-            let key = key.trim_matches(':');
-            format!("{}:{key}", namespace.trim().to_ascii_lowercase())
-        }
-        _ => format!("subject:{}", normalized.trim_matches(':')),
+    let Some((namespace, key)) = trimmed.split_once(':') else {
+        let bare = trimmed.trim_matches('/');
+        return if bare.is_empty() {
+            String::new()
+        } else {
+            format!("subject:{bare}")
+        };
+    };
+    let namespace = namespace.trim().to_ascii_lowercase();
+    let key = key.trim().trim_matches(':');
+    let key = if namespace == "path" {
+        key.trim_end_matches('/').to_owned()
+    } else {
+        key.trim_matches('/').replace('/', ":")
+    };
+    if namespace.is_empty() || key.is_empty() {
+        String::new()
+    } else {
+        format!("{namespace}:{key}")
     }
 }
 
 /// Merge tags, keeping declaration order and one `run:` tag per batch.
+///
+/// A new run tag replaces the one already there: the page belongs to the run
+/// that wrote it last, not to every run that ever touched it.
 pub fn merge_tags(existing: &[String], incoming: &[String]) -> Vec<String> {
+    let incoming_run = incoming
+        .iter()
+        .map(|tag| tag.trim())
+        .find(|tag| tag.starts_with("run:"));
     let mut out: Vec<String> = Vec::with_capacity(existing.len() + incoming.len());
     for tag in existing.iter().chain(incoming) {
         let tag = tag.trim();
         if tag.is_empty() {
             continue;
         }
-        if tag.starts_with("run:") && out.iter().any(|kept| kept.starts_with("run:")) {
-            continue;
+        if tag.starts_with("run:") {
+            if incoming_run != Some(tag) || out.iter().any(|kept| kept == tag) {
+                continue;
+            }
         }
         if !out.iter().any(|kept| kept == tag) {
             out.push(tag.to_owned());

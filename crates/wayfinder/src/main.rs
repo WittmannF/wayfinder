@@ -6,7 +6,8 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use wayfinder_core::{
     Anchor, DigestOptions, GraphBounds, GraphFormat, Kind, SaveRequest, SearchFilters, Store,
-    build_graph, check_page, digest, render_graph,
+    build_graph, check_page, digest, plan_pages, plan_structure, render_graph, seed_pages,
+    seed_structure,
 };
 
 #[derive(Parser)]
@@ -143,12 +144,18 @@ enum Command {
         /// OpenAI-compatible endpoint to call.
         #[arg(long, default_value = "https://api.deepseek.com/v1/chat/completions")]
         endpoint: String,
-        /// Model name to request.
+        /// Model name to request; defaults to WAYFINDER_MODEL.
         #[arg(long)]
         model: Option<String>,
         /// Maximum packages to write.
         #[arg(long)]
         limit: Option<usize>,
+        /// Tokens one package is expected to spend, for the estimate.
+        #[arg(long, default_value_t = 60_000)]
+        token_estimate: u64,
+        /// Actually spend the tokens the plan states.
+        #[arg(long)]
+        yes: bool,
     },
 }
 
@@ -239,6 +246,7 @@ impl From<HarnessArg> for install::Harness {
 
 mod install;
 mod mcp;
+mod writer;
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
@@ -325,7 +333,28 @@ fn run(cli: Cli) -> Result<ExitCode> {
             mcp::serve(open(&root)?, prefix)?;
             Ok(ExitCode::SUCCESS)
         }
-        Command::Seed { .. } => bail!("`wayfinder seed` lands in the next milestone"),
+        Command::Seed {
+            structure,
+            pages,
+            plan,
+            endpoint,
+            model,
+            limit,
+            token_estimate,
+            yes,
+        } => seed(
+            &open(&root)?,
+            SeedOptions {
+                structure,
+                pages,
+                plan,
+                endpoint,
+                model,
+                limit,
+                token_estimate,
+                yes,
+            },
+        ),
     }
 }
 
@@ -718,6 +747,110 @@ fn install(root: &Path, options: install::InstallOptions) -> Result<ExitCode> {
         println!("{note}");
     }
     Ok(ExitCode::SUCCESS)
+}
+
+/// One `wayfinder seed` invocation.
+struct SeedOptions {
+    structure: bool,
+    pages: bool,
+    plan: bool,
+    endpoint: String,
+    model: Option<String>,
+    limit: Option<usize>,
+    token_estimate: u64,
+    yes: bool,
+}
+
+/// Run one seeding pass: the free structure pass, or the priced page pass.
+fn seed(store: &Store, options: SeedOptions) -> Result<ExitCode> {
+    if !options.structure && !options.pages {
+        bail!("pass --structure (free, from files) or --pages (model-written, priced)");
+    }
+    if options.structure {
+        let plan =
+            plan_structure(store, options.limit).map_err(|error| anyhow::anyhow!("{error}"))?;
+        if options.plan {
+            println!("structure pass: {} package(s) found", plan.packages.len());
+            for name in &plan.packages {
+                println!("  - {name}");
+            }
+            if !plan.upgraded.is_empty() {
+                println!(
+                    "{} page(s) already hold a model-written body and would be left alone: {}",
+                    plan.upgraded.len(),
+                    plan.upgraded.join(", ")
+                );
+            }
+            if plan.empty {
+                println!("no package manifests found under this root");
+            }
+            return Ok(ExitCode::SUCCESS);
+        }
+        let run = run_id("structure");
+        let report = seed_structure(store, options.limit, &run)
+            .map_err(|error| anyhow::anyhow!("{error}"))?;
+        println!(
+            "structure pass: {} written, {} refreshed, {} left alone (run {run})",
+            report.written, report.updated, report.skipped
+        );
+        return Ok(ExitCode::SUCCESS);
+    }
+
+    let endpoint = writer::Endpoint::resolve(&options.endpoint, options.model.as_deref());
+    let plan = plan_pages(
+        store,
+        options.limit,
+        options.token_estimate,
+        endpoint.as_ref().map(|endpoint| endpoint.model.clone()),
+    );
+    println!("page pass plan:");
+    println!("  packages to upgrade   {}", plan.packages);
+    println!("  packages left alone   {}", plan.skipped);
+    println!(
+        "  estimated spend       {} tokens (~{} per package)",
+        plan.estimated_tokens, plan.token_estimate_per_package
+    );
+    println!(
+        "  model                 {}",
+        plan.model.as_deref().unwrap_or("(none configured)")
+    );
+    if let Some(reason) = &plan.unavailable {
+        println!("  cannot run: {reason}");
+        return Ok(ExitCode::SUCCESS);
+    }
+    if options.plan || !options.yes {
+        println!(
+            "
+Nothing was written. Pass --yes to spend the tokens above."
+        );
+        return Ok(ExitCode::SUCCESS);
+    }
+    let endpoint = endpoint.expect("checked above");
+    let run = run_id("pages");
+    let writer = writer::HttpPageWriter::new(endpoint);
+    let report = seed_pages(store, &writer, options.limit, &run)
+        .map_err(|error| anyhow::anyhow!("{error}"))?;
+    println!(
+        "page pass: {} saved, {} failed, {} tokens (run {run})",
+        report.saved, report.failed, report.tokens_spent
+    );
+    if let Some(reason) = &report.last_failure {
+        println!("last failure: {reason}");
+    }
+    Ok(if report.failed > 0 {
+        ExitCode::from(1)
+    } else {
+        ExitCode::SUCCESS
+    })
+}
+
+/// A short run id, so one batch of seeded pages can be found later.
+fn run_id(kind: &str) -> String {
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|delta| delta.as_secs())
+        .unwrap_or(0);
+    format!("{kind}-{stamp}")
 }
 
 /// Read all of stdin as a string.
