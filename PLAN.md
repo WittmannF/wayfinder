@@ -59,14 +59,15 @@ share one pool instead of forking it.
 
 ## Phases
 
-1. **Core store** — page model and frontmatter, rev, anchors, atomic writes, file
-   lock, index build, search with relation expansion, section reads, drift check,
-   digest. Tests for each; a concurrency test with N writers.
-2. **Graph** — nodes (page/subject/path), edges (about/cites/supersedes/depends/
-   conflict), deterministic radial layout, JSON/DOT/SVG/HTML/Mermaid emitters, bounds
+1. **Core store** — done: page model and frontmatter, rev, anchors, atomic writes,
+   file lock, index build, search with relation expansion, section reads, drift
+   check, digest, and a concurrency test with N writers.
+2. **Graph** — done: nodes (page/subject/path), edges (about/cites/supersedes/
+   depends), deterministic radial layout, JSON/DOT/SVG/HTML/Mermaid emitters, bounds
    with cluster aggregation.
-3. **Harness integration** — `mcp serve` (initialize, tools/list, tools/call), tool
-   schemas, and `install` for claude/codex/copilot/cursor/gemini/agents.
+3. **Harness integration** — done: `mcp` (initialize, tools/list, tools/call, seven
+   tools, `--prefix` for a harness that owns `memory_*`) and `install` for
+   claude/codex/copilot/cursor/gemini/agents, merging into existing configuration.
 4. **Seeding** — free structure pass over manifests and READMEs (no model), priced
    model pass through an OpenAI-compatible endpoint, plan-first with an explicit
    cost, resumable and stoppable.

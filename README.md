@@ -41,21 +41,35 @@ the workspace at all. Wayfinder is that feature set with the harness left out.
 
 ## Harnesses
 
-Wayfinder is harness-agnostic: the CLI works anywhere an agent can run a command, and
-`wayfinder mcp` (next milestone) speaks MCP over stdio for Claude Code, Codex, Copilot,
-Cursor, and Gemini CLI. `wayfinder install <harness>` writes that harness's MCP entry
-and instruction snippet.
+The CLI works anywhere an agent can run a command. For a harness that speaks MCP,
+`wayfinder mcp` serves the same operations over stdio — `memory_search`,
+`memory_read`, `memory_save`, `memory_list`, `memory_check`, `memory_digest`, and
+`memory_graph` — and `wayfinder mcp --prefix wayfinder` renames them for a harness
+that already owns `memory_*`.
+
+`wayfinder install <harness>` writes that harness's MCP entry and its instruction
+snippet, merging into what is already there:
+
+| Harness | MCP entry | Instructions |
+|---|---|---|
+| `claude` | `.mcp.json` (or `~/.claude.json`) | `CLAUDE.md` |
+| `codex` | `~/.codex/config.toml` | `AGENTS.md` |
+| `copilot` | `.vscode/mcp.json` | `.github/copilot-instructions.md` |
+| `cursor` | `.cursor/mcp.json` | `.cursor/rules/wayfinder.mdc` |
+| `gemini` | `.gemini/settings.json` | `GEMINI.md` |
+| `agents` | — | `AGENTS.md`, with the CLI commands |
 
 ## Status
 
-Milestone 1 is the store and the terminal surface: `init`, `save`, `read`, `search`,
-`list`, `check`, `digest`, `graph`, `reindex`, `status`, with tests for each, the
-revision fence, anchors, the graph, and concurrent writers. `mcp`, `install`, `seed`,
-and the benchmark harness are the next milestones; see [PLAN.md](PLAN.md).
+Milestone 1 was the store and the terminal surface. Milestone 2 adds the MCP server and
+`install`, so a harness gets typed tools and an instruction block from one command.
+
+Next: `seed` (the free structure pass and the priced model pass), then the benchmark
+against no tool, the harness LLM Wiki, and graphify. See [PLAN.md](PLAN.md).
 
 ## Development
 
 ```console
-$ cargo test          # 25 tests: store, index, search, anchors, graph, CLI
+$ cargo test          # 40 tests: store, index, search, anchors, graph, CLI, MCP, install
 $ cargo build --release
 ```

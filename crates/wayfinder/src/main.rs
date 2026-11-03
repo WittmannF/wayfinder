@@ -124,7 +124,11 @@ enum Command {
         force: bool,
     },
     /// Serve the pool over MCP on stdin/stdout.
-    Mcp,
+    Mcp {
+        /// Tool-name root: `memory` (the harness surface) or `wayfinder`.
+        #[arg(long, default_value = "memory")]
+        prefix: String,
+    },
     /// Write pages with a model, behind an explicit spend.
     Seed {
         /// Write one page per package from its manifest and README: no model.
@@ -220,6 +224,20 @@ enum HarnessArg {
     Agents,
 }
 
+impl From<HarnessArg> for install::Harness {
+    fn from(value: HarnessArg) -> Self {
+        match value {
+            HarnessArg::Claude => install::Harness::Claude,
+            HarnessArg::Codex => install::Harness::Codex,
+            HarnessArg::Copilot => install::Harness::Copilot,
+            HarnessArg::Cursor => install::Harness::Cursor,
+            HarnessArg::Gemini => install::Harness::Gemini,
+            HarnessArg::Agents => install::Harness::Agents,
+        }
+    }
+}
+
+mod install;
 mod mcp;
 
 fn main() -> ExitCode {
@@ -291,9 +309,20 @@ fn run(cli: Cli) -> Result<ExitCode> {
             harness,
             global,
             force,
-        } => install(&root, harness, global, force),
-        Command::Mcp => {
-            mcp::serve(open(&root)?)?;
+        } => install(
+            &root,
+            install::InstallOptions {
+                harness: harness.into(),
+                global,
+                force,
+                binary: "wayfinder".to_owned(),
+            },
+        ),
+        Command::Mcp { prefix } => {
+            let prefix = mcp::Prefix::parse(&prefix).ok_or_else(|| {
+                anyhow::anyhow!("unknown prefix {prefix:?}; use memory or wayfinder")
+            })?;
+            mcp::serve(open(&root)?, prefix)?;
             Ok(ExitCode::SUCCESS)
         }
         Command::Seed { .. } => bail!("`wayfinder seed` lands in the next milestone"),
@@ -677,16 +706,18 @@ fn status(store: &Store, json: bool) -> Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
-fn install(_root: &Path, harness: HarnessArg, _global: bool, _force: bool) -> Result<ExitCode> {
-    let name = match harness {
-        HarnessArg::Claude => "claude",
-        HarnessArg::Codex => "codex",
-        HarnessArg::Copilot => "copilot",
-        HarnessArg::Cursor => "cursor",
-        HarnessArg::Gemini => "gemini",
-        HarnessArg::Agents => "agents",
-    };
-    bail!("`wayfinder install {name}` lands in the next milestone")
+fn install(root: &Path, options: install::InstallOptions) -> Result<ExitCode> {
+    let report = install::install(root, &options)?;
+    for path in &report.written {
+        println!("wrote {}", path.display());
+    }
+    for (path, reason) in &report.skipped {
+        println!("left {} alone: {reason}", path.display());
+    }
+    for note in &report.notes {
+        println!("{note}");
+    }
+    Ok(ExitCode::SUCCESS)
 }
 
 /// Read all of stdin as a string.
