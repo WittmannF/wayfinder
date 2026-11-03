@@ -1,0 +1,19 @@
+[package]
+name = "wayfinder-core"
+description = "Workspace memory that agents write to and reuse: pages, anchors, revisions, search, and the knowledge graph"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+fs2.workspace = true
+rusqlite.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+time.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
