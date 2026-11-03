@@ -259,7 +259,7 @@ pub fn parse_frontmatter(text: &str) -> Result<(Frontmatter, String)> {
             }
             "subject" | "subjects" => {
                 block_key = Some("subject".to_owned());
-                extend_inline(&mut front.subjects, value, |s| normalize_subject(s));
+                extend_inline(&mut front.subjects, value, normalize_subject);
             }
             "depends" => {
                 block_key = Some("depends".to_owned());
@@ -482,10 +482,10 @@ pub fn merge_tags(existing: &[String], incoming: &[String]) -> Vec<String> {
         if tag.is_empty() {
             continue;
         }
-        if tag.starts_with("run:") {
-            if incoming_run != Some(tag) || out.iter().any(|kept| kept == tag) {
-                continue;
-            }
+        if tag.starts_with("run:")
+            && (incoming_run != Some(tag) || out.iter().any(|kept| kept == tag))
+        {
+            continue;
         }
         if !out.iter().any(|kept| kept == tag) {
             out.push(tag.to_owned());
@@ -531,7 +531,7 @@ fn push_unique(list: &mut Vec<String>, value: &str) {
 fn extend_inline(list: &mut Vec<String>, value: &str, clean: impl Fn(&str) -> String) {
     for entry in inline_list(value) {
         let entry = clean(entry.trim());
-        if !entry.is_empty() && !list.iter().any(|kept| *kept == entry) {
+        if !entry.is_empty() && !list.contains(&entry) {
             list.push(entry);
         }
     }

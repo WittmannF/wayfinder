@@ -291,7 +291,7 @@ fn the_digest_names_the_pool_and_an_empty_pool_says_nothing() {
 
 #[test]
 fn the_index_follows_files_written_outside_the_store() {
-    let (directory, store) = pool();
+    let (_directory, store) = pool();
     store
         .save(&SaveRequest::new("Rate limits", "original body"))
         .expect("save");

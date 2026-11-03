@@ -273,7 +273,7 @@ impl Store {
         }
         for subject in &request.subjects {
             let normalized = normalize_subject(subject);
-            if !normalized.is_empty() && !front.subjects.iter().any(|kept| *kept == normalized) {
+            if !normalized.is_empty() && !front.subjects.contains(&normalized) {
                 front.subjects.push(normalized);
             }
         }

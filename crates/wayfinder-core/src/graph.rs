@@ -134,10 +134,7 @@ pub fn build_graph(store: &Store, bounds: GraphBounds, subject: Option<&str>) ->
     if let Some(subject) = subject {
         let wanted = crate::page::normalize_subject(subject);
         keep.retain(|page| {
-            page.front
-                .subjects
-                .iter()
-                .any(|declared| *declared == wanted)
+            page.front.subjects.contains(&wanted)
                 || page
                     .front
                     .anchors
