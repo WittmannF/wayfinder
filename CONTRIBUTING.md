@@ -56,3 +56,11 @@ Numbers in a pull request should say which commit of the benchmarked checkout th
 from, how many repeats, and what the arm configuration was. [`benchmark/README.md`](benchmark/README.md)
 lists what the comparison cannot claim; a claim outside those limits will be asked to justify
 itself.
+
+## Licensing of contributions
+
+Wayfinder is licensed under the [Apache License 2.0](LICENSE). By opening a pull request you
+agree that your contribution is licensed under the same terms, and you confirm you have the
+right to submit it. No separate contributor agreement is required. If your change adds code
+from another project, say so in the pull request and make sure its license is compatible and
+its notice is carried in [NOTICE](NOTICE).

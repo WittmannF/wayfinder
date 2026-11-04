@@ -14,7 +14,7 @@
 
 <p align="center">
   <a href="https://github.com/zaterka/wayfinder/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/zaterka/wayfinder/actions/workflows/ci.yml/badge.svg"></a>
-  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
+  <a href="LICENSE"><img alt="License: Apache 2.0" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg"></a>
   <a href="Cargo.toml"><img alt="Rust 1.85+" src="https://img.shields.io/badge/rust-1.85%2B-orange.svg"></a>
 </p>
 
@@ -204,4 +204,6 @@ process the harness starts and stops.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+Apache License 2.0 — see [LICENSE](LICENSE) and [NOTICE](NOTICE). In short: use it, fork it,
+ship it in a product, commercial or not; keep the notices and the license text, and if you
+sue anyone over a patent in it, your patent grant ends.
