@@ -1,6 +1,7 @@
 [package]
 name = "wayfinder-bench"
 description = "Benchmark four memory tool surfaces on one agent loop and one model"
+publish = false
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

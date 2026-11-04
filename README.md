@@ -33,8 +33,8 @@ The `llm-wiki` arm is that same idea implemented in-process by the harness under
 measurement is therefore a fair test of the idea, not of one implementation. Every follow-up
 in every arm passed the same ground-truth check. The mixed per-case result is
 the interesting part: the in-process wiki wins package-ownership questions, wayfinder wins the
-command surface and the drift case. Method, full tables, and what the numbers cannot claim:
-[`benchmark/RESULTS.md`](benchmark/RESULTS.md).
+command surface and the drift case. Method, per-case split, reproduction steps, and what the numbers cannot claim:
+[**BENCHMARK.md**](BENCHMARK.md).
 
 ## Install
 

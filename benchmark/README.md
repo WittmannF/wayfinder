@@ -1,4 +1,8 @@
-# Benchmark: four tool surfaces, one agent loop, one model
+# Benchmark runner
+
+> The published results — numbers, per-case split, and limits — live in
+> [`../BENCHMARK.md`](../BENCHMARK.md). This page documents the runner that produces them.
+> The crate is `publish = false`: it is a reproducibility tool, not part of the shipped CLI.
 
 `wayfinder-bench` asks the same questions with and without a memory tool and reports what
 each surface cost in wall time and tokens.
