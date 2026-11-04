@@ -1,0 +1,77 @@
+{
+  "arms": [
+    "none",
+    "llm-wiki",
+    "wayfinder",
+    "graphify"
+  ],
+  "cases": [
+    "ownership",
+    "conventions",
+    "commands",
+    "format-version",
+    "stale-page",
+    "fan-out"
+  ],
+  "repeats": 3,
+  "provider": "kornerstone",
+  "model": "qwen38-27b-fp8",
+  "preset": "standard",
+  "commit": "cc35018ff00f34b1e199c11c899bb461b4ad389b",
+  "sessions": [
+    {
+      "arm": "none",
+      "case": "ownership",
+      "case_title": "Package ownership: session-log persistence and its compression option",
+      "follow_up": "compression-file",
+      "repeat": 1,
+      "stage": "follow-up",
+      "exit_code": 0,
+      "answer": "\n\n**Package:** `packages/session/session-persistence-jsonl`\n**Source file:** `packages/session/session-persistence-jsonl/src/format.ts`\n\nThat's where the physical encoding is defined: the `JsonlCompression` type (`'zstd' | 'none'`, line 30) and the encoding→artifact mapping it drives — `logSuffix`, `compressionSuffix`, `generationLogFilename`, `parseGenerationLogFilename`, `generationLogPath`, and `logPath`. A new encoding starts there: widen the type, give it its filename suffix, and the rest of the backend consumes it through these helpers.\n\nFor completeness, the surrounding touch points for a full new-encoding change (not the answer, but the rest of the surface): `src/index.ts` holds the `compression` config option, `JsonlCompressionSchema`, `DEFAULT_COMPRESSION`, and the encode/decode dispatch (`encodeMaterialization`/`encodeEventBatch`), and `src/generation.ts` dispatches on compression during migration and header reads.\n",
+      "passed": true,
+      "failure": null,
+      "metrics": {
+        "wall_ms": 84183,
+        "llm_ms": 0,
+        "steps": 5,
+        "tool_calls": 6,
+        "memory_calls": 0,
+        "searches": 0,
+        "reads": 0,
+        "saves": 0,
+        "input_tokens": 112641,
+        "output_tokens": 1754,
+        "total_tokens": 114395,
+        "first_request_input_tokens": 13267,
+        "reused_without_read": false
+      }
+    },
+    {
+      "arm": "none",
+      "case": "ownership",
+      "case_title": "Package ownership: session-log persistence and its compression option",
+      "follow_up": "compression-config",
+      "repeat": 1,
+      "stage": "follow-up",
+      "exit_code": 0,
+      "answer": "\n\nConfirmed from the code in `packages/session/session-persistence-jsonl` (the `dsh-session-persistence-jsonl` package):\n\n- **Field:** `compression`, a field of the plugin's `Config` (alongside the required `root`), exported as `JsonlCompressionSchema` for loader validation.\n- **Values:** `'zstd'` or `'none'` — `'zstd'` stores the log as checksummed Zstandard frames (one frame for the header line, then one per durable append batch), while `'none'` stores the same logical lines as plain newline-delimited UTF-8 text.\n- **Default:** `'zstd'`, set via `DEFAULT_COMPRESSION` in `src/index.ts` (the schema applies `.default(DEFAULT_COMPRESSION)`, and the constructor falls back to `config.compression ?? DEFAULT_COMPRESSION`).\n\nRelated behavior worth remembering from the same investigation: a root belongs to exactly one encoding — startup discovery and targeted lookup reject generations carrying the opposite file suffix, and switching compression requires a separate root (no mixed-root fallback or dual write).\n",
+      "passed": true,
+      "failure": null,
+      "metrics": {
+        "wall_ms": 50116,
+        "llm_ms": 0,
+        "steps": 4,
+        "tool_calls": 4,
+        "memory_calls": 0,
+        "searches": 0,
+        "reads": 0,
+        "saves": 0,
+        "input_tokens": 67305,
+        "output_tokens": 1079,
+        "total_tokens": 68384,
+        "first_request_input_tokens": 13259,
+        "reused_without_read": false
+      }
+    }
+  ]
+}

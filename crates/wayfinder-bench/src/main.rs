@@ -58,6 +58,9 @@ struct Cli {
     /// Report what would run and stop.
     #[arg(long)]
     plan: bool,
+    /// Continue a run: skip the series its record already holds.
+    #[arg(long)]
+    resume: bool,
 }
 
 /// One tool surface under test.
@@ -149,7 +152,7 @@ struct Expectation {
 }
 
 /// Token and work figures folded from one session log.
-#[derive(Debug, Clone, Default, Serialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 struct Metrics {
     wall_ms: u64,
     llm_ms: u64,
@@ -178,7 +181,7 @@ impl Metrics {
 }
 
 /// One session's record.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct SessionRecord {
     arm: String,
     case: String,
@@ -194,7 +197,7 @@ struct SessionRecord {
 }
 
 /// One complete run's records, written next to the report.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct RunRecord {
     arms: Vec<String>,
     cases: Vec<String>,
@@ -274,6 +277,26 @@ fn main() -> Result<()> {
         std::env::current_dir()?.join(&cli.out)
     };
     fs::create_dir_all(&out)?;
+    let existing = if cli.resume {
+        fs::read_to_string(out.join("run.json"))
+            .ok()
+            .and_then(|text| serde_json::from_str::<RunRecord>(&text).ok())
+    } else {
+        None
+    };
+    // A series is complete when its record already holds any session for it: a
+    // half-finished series is cheaper to redo than to stitch together.
+    let done: std::collections::BTreeSet<(String, String, usize)> = existing
+        .iter()
+        .flat_map(|record| record.sessions.iter())
+        .map(|session| (session.arm.clone(), session.case.clone(), session.repeat))
+        .collect();
+    if let Some(previous) = &existing {
+        println!(
+            "  resuming: {} session(s) already recorded",
+            previous.sessions.len()
+        );
+    }
     let mut record = RunRecord {
         arms: arms.iter().map(|arm| arm.as_str().to_owned()).collect(),
         cases: selected.iter().map(|case| case.id.clone()).collect(),
@@ -282,7 +305,7 @@ fn main() -> Result<()> {
         model: cli.model.clone(),
         preset: cli.preset.clone(),
         commit: commit.clone(),
-        sessions: Vec::new(),
+        sessions: existing.map(|record| record.sessions).unwrap_or_default(),
     };
 
     let wayfinder_bin = std::env::current_exe()?
@@ -297,6 +320,14 @@ fn main() -> Result<()> {
             for arm in &arms {
                 if *arm == Arm::Graphify && graphify_bin.is_none() {
                     println!("skip graphify / {}: graphify is not installed", case.id);
+                    continue;
+                }
+                if done.contains(&(arm.as_str().to_owned(), case.id.clone(), repeat)) {
+                    println!(
+                        "  skip {} / {} / repeat {repeat}: already recorded",
+                        arm.as_str(),
+                        case.id
+                    );
                     continue;
                 }
                 let sessions = run_series(&RunContext {
