@@ -1,66 +1,143 @@
 # wayfinder
 
-Workspace memory that coding agents write to and reuse, from the terminal.
+**Workspace memory that coding agents write to and reuse — from the terminal, over MCP, in any harness.**
 
-An agent that solved something once should not solve it again. Wayfinder keeps a pool
-of markdown pages under `.wayfinder/memory/` — facts, decisions, gotchas, and
-pointers, each citing the files it rests on — and gives any harness five commands to
-write, find, read, verify, and draw them.
+[![CI](https://github.com/zaterka/wayfinder/actions/workflows/ci.yml/badge.svg)](https://github.com/zaterka/wayfinder/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Rust 1.85+](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](https://www.rust-lang.org)
+
+An agent that solved something once should not solve it again. Wayfinder keeps a pool of
+markdown pages under `.wayfinder/memory/` — facts, decisions, gotchas, and pointers, each
+citing the files it rests on — and gives any harness the verbs to write, find, read, verify,
+and draw them.
+
+![The Wayfinder viewer: a 47-page pool drawn as a knowledge graph, with one page selected](docs/viewer.png)
+
+## Measured
+
+Three cases of a published agent benchmark, four tool surfaces, one agent loop, one model
+(Qwen 3.8-27B over a self-hosted route). Follow-up cost against **no tool at all**:
+
+| Surface | Wall time | Tokens |
+|---|---|---|
+| **wayfinder** | **−13 %** | **−30 %** |
+| harness LLM Wiki (in-process memory) | +6 % | +23 % |
+| graphify (code graph, queried through the shell) | +13 % | +5 % |
+
+Every follow-up in every arm passed the same ground-truth check. The mixed per-case result is
+the interesting part: the in-process wiki wins package-ownership questions, wayfinder wins the
+command surface and the drift case. Method, full tables, and what the numbers cannot claim:
+[`benchmark/RESULTS.md`](benchmark/RESULTS.md).
+
+## Install
 
 ```console
-$ wayfinder init
-$ wayfinder seed --structure            # one page per package, from files only
-$ wayfinder search "how many requests per second"
-$ wayfinder read rate-limits --section Throughput
-$ wayfinder save --title "Rate limits" --body - --anchor src/limiter.rs:42
-$ wayfinder check
-$ wayfinder graph --format html --out graph.html --open
-$ wayfinder graph --format html --out graph.html --watch   # rewrite on every change
+$ cargo install --git https://github.com/zaterka/wayfinder wayfinder
+$ cargo install --git https://github.com/zaterka/wayfinder wayfinder-bench   # the comparison runner
 ```
 
-## Why it pays
+Rust 1.85+. One binary, no runtime, no daemon, no database server — the index is a SQLite
+file the store rebuilds from the pages.
 
-In the Factored Harness benchmark, an agent with a reusable wiki answered the same
-follow-up questions in **59.1 s instead of 126.2 s (−53 %)** and **63 312 tokens
-instead of 92 087 (−31 %)**, and answered six of eight follow-ups without re-reading
-the workspace at all. Wayfinder is that feature set with the harness left out.
+## Quickstart
 
-## What it does
+```console
+$ wayfinder init                      # create .wayfinder/ in this project
+$ wayfinder seed --structure          # one page per package, derived from files only
+$ wayfinder install claude            # MCP entry + instructions for your harness
+$ wayfinder graph --format html --out graph.html --open
+```
 
-- **Pages with declared relations.** `kind`, `tags`, `subject`, `depends`,
-  `supersedes`, and `anchors` are frontmatter an agent fills in; the body is prose a
-  later session reads.
-- **Section reads.** `read --section` returns the matching heading and its body, so a
-  follow-up costs one section instead of a whole page.
-- **Search over a real index.** SQLite FTS5, then one hop over declared relations, so
-  a page that never names the query still surfaces.
-- **Anchors that expire.** Every cited file is fingerprinted at save; `check` reports
-  `fresh`, `changed`, or `missing` so a session knows what to re-read.
-- **Revision-safe concurrent writes.** A page's revision is a content hash; a save
-  carrying a stale `--expected-rev` is refused instead of clobbering another agent.
-- **A prompt digest.** `digest` prints the block that tells a session the pool exists.
-- **A graph you can click.** `graph --format html` writes one self-contained page: the
-  pool drawn as a knowledge graph, where a node opens its title, kind, freshness, tags,
-  and excerpt; kind and subject filters and a text filter narrow it; clusters name the
-  pages a budget hid; a banner counts the pages whose cited file changed. `--watch`
-  rewrites the file while a pool is being written to, so a second screen stays current.
-  No CDN, no build step, no network — it opens from disk on an offline machine. Static
-  exports stay available: `svg`, `json`, `dot`, `mermaid`.
-- **A pool on day one.** `seed --structure` writes one pointer page per package from
-  its manifest and README — no model, no tokens. `seed --pages` replaces those pointers
-  with pages a model wrote from reading the code, behind a plan that states the spend
-  first.
+Start a new session in the harness afterwards. The model gets `memory_search`,
+`memory_read`, `memory_save`, `memory_list`, `memory_check`, `memory_digest`, and
+`memory_graph`, plus an instruction block telling it when to use them.
+
+Commit `.wayfinder/memory/` with the repository: the pages are the durable artifact, and a
+reviewer can read them in a diff. The index (`.wayfinder/index.db`) is derived — ignore it if
+you prefer; deleting it costs one scan.
+
+## Commands
+
+| Command | What it does |
+|---|---|
+| `wayfinder init` | Create the pool and build its index. |
+| `wayfinder save --title … --body …` | Write or merge a page; `--anchor path[:line]` fingerprints a cited file. |
+| `wayfinder search "…"` | FTS5 over titles and bodies, then one hop over declared relations. |
+| `wayfinder read <id> [--section …]` | One page, or just the heading that matches. |
+| `wayfinder list` | The pool, newest first. |
+| `wayfinder check [<id>]` | `fresh` / `changed` / `missing` per cited file; exits non-zero on drift. |
+| `wayfinder digest` | The block a harness injects so a session knows the pool exists. |
+| `wayfinder graph --format …` | `html` (interactive), `svg`, `json`, `dot`, `mermaid`; `--watch`, `--open`. |
+| `wayfinder seed --structure` | One pointer page per package from manifests and READMEs — no model, no tokens. |
+| `wayfinder seed --pages` | Replace those pointers with model-written pages, behind a stated cost and `--yes`. |
+| `wayfinder install <harness>` | MCP entry + instructions: `claude`, `codex`, `copilot`, `cursor`, `gemini`, `agents`. |
+| `wayfinder mcp` | Serve the pool over MCP on stdin/stdout (`--prefix wayfinder` renames the tools). |
+| `wayfinder status` · `reindex` | What the pool holds · rebuild the derived index. |
+
+`wayfinder --help` prints the same list with flags.
+
+## How it works
+
+```
+.wayfinder/
+├── memory/<id>.md     one page per finding: YAML frontmatter + markdown body
+├── index.db           derived SQLite (FTS5 + edges); delete it and it rebuilds
+└── write.lock         cross-process write lock
+```
+
+The page is the durable artifact; everything else is derived from it.
+
+```markdown
+---
+title: Rate limits
+tags: [memory]
+kind: fact
+subject: [package:gateway, path:src/limiter.rs]
+depends: [serde]
+created: 2026-11-03T12:00:00Z
+updated: 2026-11-03T12:00:00Z
+anchors:
+  - src/limiter.rs
+    sha: 3f2a1c4d5e6b7a89
+---
+
+## Throughput
+
+The limiter allows 100 requests per second per key.
+```
+
+Four properties make reuse pay instead of cost:
+
+- **Section reads.** `read --section Throughput` returns that heading's body, so a follow-up
+  spends one section instead of a page.
+- **Content revisions.** `rev = hash16(canonical bytes)`, computed and never stored. A save
+  carrying a stale `--expected-rev` is refused, so two agents cannot silently clobber each
+  other; page writes are temp-file-and-rename and the index updates under an exclusive lock.
+- **Anchors that expire.** Every cited file is fingerprinted at save, and `check` reports what
+  changed, so a session knows what to re-read before trusting a page.
+- **One pool per project.** The root resolves as `--root`, then `WAYFINDER_ROOT`, then the
+  nearest ancestor holding `.wayfinder/` or `.git/` — a worktree and its branches share one
+  pool instead of forking it.
+
+Search is FTS5, expanded one hop over declared relations and fused by reciprocal rank, so a
+page that never names the query can still answer it. The graph draws pages, subject and
+package hubs, and cited paths with `about` / `cites` / `depends` / `supersedes` edges, bounded
+so a large pool draws named clusters with counts instead of a hairball.
+
+## The viewer
+
+`wayfinder graph --format html` writes one self-contained file — no CDN, no build step, no
+network, so it opens from disk on an offline machine. Clicking or pressing Enter on a node
+opens its title, kind, freshness, tags, and excerpt, along with the `read` and `check`
+commands that act on it; kind buttons, a subject picker, and a text filter narrow the
+drawing; a banner counts the pages whose cited file changed. `--watch` rewrites the file as
+the pool changes, which is what several agents writing at once looks like from a second
+screen.
 
 ## Harnesses
 
-The CLI works anywhere an agent can run a command. For a harness that speaks MCP,
-`wayfinder mcp` serves the same operations over stdio — `memory_search`,
-`memory_read`, `memory_save`, `memory_list`, `memory_check`, `memory_digest`, and
-`memory_graph` — and `wayfinder mcp --prefix wayfinder` renames them for a harness
-that already owns `memory_*`.
-
-`wayfinder install <harness>` writes that harness's MCP entry and its instruction
-snippet, merging into what is already there:
+The CLI works anywhere an agent can run a command; `wayfinder mcp` speaks MCP over stdio for
+harnesses that prefer typed tools. One process per session, no port, no network surface.
 
 | Harness | MCP entry | Instructions |
 |---|---|---|
@@ -71,83 +148,41 @@ snippet, merging into what is already there:
 | `gemini` | `.gemini/settings.json` | `GEMINI.md` |
 | `agents` | — | `AGENTS.md`, with the CLI commands |
 
-## Status
+`install` merges instead of replacing: an existing `.mcp.json` keeps its other servers, an
+existing `CLAUDE.md` keeps its prose, and the wayfinder block lives between markers so a
+second install updates it in place. A differing entry is reported and left alone unless
+`--force` is passed.
 
-Milestone 1 was the store and the terminal surface. Milestone 2 adds the MCP server and
-`install`, so a harness gets typed tools and an instruction block from one command.
-
-Milestone 3 adds `seed`: the free structure pass (Cargo, npm, pyproject, and Go
-manifests; 18 skipped directory names; anchors on the manifest and README; one
-`depends` edge per declared dependency) and the priced page pass (plan, estimate,
-`--yes` gate, per-package failure reporting, provider-reported token spend).
-
-Next: the benchmark against no tool, the harness LLM Wiki, and graphify. See
-[PLAN.md](PLAN.md).
-
-## Quickstart
-
-```console
-$ cargo install --path crates/wayfinder        # or: cargo build --release
-$ wayfinder init                              # create .wayfinder/
-$ wayfinder seed --structure                  # one page per package, from files only
-$ wayfinder install claude                    # MCP entry + instructions for your harness
-```
-
-`install` merges into what is already there and tells you what it left alone. Start a
-new session in the harness afterwards; the agent gets `memory_search`,
-`memory_read`, `memory_save`, `memory_list`, `memory_check`, `memory_digest`, and
-`memory_graph`, plus an instruction block that says when to use them. A harness that
-already owns `memory_*` names can run `wayfinder mcp --prefix wayfinder`.
-
-Commit `.wayfinder/memory/` with the repository: the pages are the durable part and a
-reviewer can read them in a diff. The index (`.wayfinder/index.db`) is derived — add
-it to `.gitignore` if you prefer; deleting it costs one scan.
-
-## Measured
-
-Three cases of the harness benchmark (the ones covering package ownership, the
-command surface, and a cited file changing between sessions), four arms, one repeat,
-Qwen 3.8-27B over the kornerstone route. Follow-up totals per arm:
-
-| Case | none | llm-wiki | wayfinder | graphify |
-|---|---|---|---|---|
-| ownership | 182 779 | **93 604** | 115 530 | 203 953 |
-| commands | 113 008 | 151 280 | **94 535** | 172 781 |
-| stale-page | 83 809 | 260 285 | 89 735 | **81 769** |
-
-Follow-up medians against no tool: **wayfinder −30 % tokens and −13 % wall**,
-llm-wiki +23 % tokens and +6 % wall, graphify +5 % tokens and +13 % wall. Every
-follow-up in every arm passed the ground-truth check.
-
-The discovery investment is real and per-arm: wayfinder spent 328 k / 346 k / 167 k
-tokens across the three cases' discovery sessions, llm-wiki 414 k / 214 k / 208 k,
-graphify 151 k / 229 k / 179 k.
-
-Three things to keep in view: this is one repeat of three cases (the harness's own
-v2 result, from six cases with repeats, was −53 % wall and −31 % tokens for
-llm-wiki); the mixed result is the finding, not a bug — llm-wiki wins package
-ownership and loses the command surface and the drift case, wayfinder wins two of
-three; and the graphify arm runs its code-only graph, queried through the shell.
-
-Full tables: [benchmark/RESULTS.md](benchmark/RESULTS.md).
+Wayfinder reads the page format the Factored Harness writes — including its `sources:` list —
+so an existing pool works as-is.
 
 ## Benchmark
 
-`wayfinder-bench` runs four tool surfaces through one agent loop and one model:
-no tool, the Factored Harness's own LLM Wiki, graphify, and wayfinder, over the six
-cases the harness benchmark defines. Each arm gets its own git worktree, its own
-home, and its own tool surface; the only difference between arms is what the model
-can call.
+`wayfinder-bench` runs four tool surfaces through the same agent loop and model, each in its
+own git worktree and harness home, and folds cost from the session log the harness itself
+wrote.
 
 ```console
-$ cargo build --release
-$ ./target/release/wayfinder-bench --plan --repo <checkout> --arms none,llm-wiki,wayfinder,graphify
-$ ./target/release/wayfinder-bench --repo <checkout> --repeats 3 --out benchmark/results/run-1
+$ wayfinder-bench --plan --repo <checkout> --arms none,llm-wiki,wayfinder,graphify
+$ wayfinder-bench --repo <checkout> --repeats 3 --out results/run-1
+$ wayfinder-bench --report --out results/run-1        # re-render without spending a token
 ```
+
+Design, counters, and the things it cannot claim: [`benchmark/README.md`](benchmark/README.md).
 
 ## Development
 
 ```console
-$ cargo test          # 64 tests: store, index, search, anchors, graph, viewer, CLI, MCP, install, seed
-$ cargo build --release
+$ cargo test                 # 65 tests: store, index, search, anchors, graph, viewer, MCP, install, seed
+$ cargo clippy --all-targets # clean
+$ cargo fmt --all --check
 ```
+
+Layout: `crates/wayfinder-core` (pool, index, search, anchors, graph, viewer, seeding),
+`crates/wayfinder` (CLI, MCP server, harness install), `crates/wayfinder-bench` (the
+comparison runner). Design decisions and the roadmap are in [`PLAN.md`](PLAN.md);
+the review bar is in [`CONTRIBUTING.md`](CONTRIBUTING.md).
+
+## License
+
+MIT — see [LICENSE](LICENSE).

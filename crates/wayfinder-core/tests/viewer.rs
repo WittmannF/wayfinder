@@ -187,3 +187,41 @@ fn the_static_renderings_stay_available() {
     let json = render_graph(&view, GraphFormat::Json).expect("json");
     assert!(json.contains("\"page:rate-limits\""));
 }
+
+#[test]
+fn a_harness_pool_page_reads_and_round_trips() {
+    // The shape the Factored Harness writes: `sources:` as a block list, block
+    // `tags`/`subject`, and anchors with a fingerprint.
+    let text = "---\n\
+title: 'Bedrock credentials: origin and diagnostic'\n\
+tags:\n  - bedrock\n  - credentials\n\
+created: 2026-11-03T14:27:15.890Z\n\
+updated: 2026-11-03T14:27:15.890Z\n\
+sources:\n  - session:session-e4c96c86\n  - run:abc\n\
+kind: gotcha\n\
+subject:\n  - package:llm\n  - provider:bedrock\n\
+anchors:\n  - path: packages/llm/stream.ts\n    sha: 0123456789abcdef\n\
+depends:\n  - dsh-llm\n\
+---\n\n## Symptom\nIt failed.\n";
+    let page = wayfinder_core::Page::parse("bedrock-credentials", text).expect("parse");
+    assert_eq!(
+        page.front.title,
+        "Bedrock credentials: origin and diagnostic"
+    );
+    assert_eq!(page.front.sources, ["session:session-e4c96c86", "run:abc"]);
+    assert_eq!(page.front.tags, ["bedrock", "credentials"]);
+    assert_eq!(page.front.subjects, ["package:llm", "provider:bedrock"]);
+    assert_eq!(page.front.depends, ["dsh-llm"]);
+    assert_eq!(page.front.kind, Some(wayfinder_core::Kind::Gotcha));
+    assert_eq!(
+        page.front.anchors[0].sha.as_deref(),
+        Some("0123456789abcdef")
+    );
+
+    // Rendering and re-parsing keeps every field, so a pool survives a pass
+    // through wayfinder.
+    let again =
+        wayfinder_core::Page::parse("bedrock-credentials", &page.render()).expect("reparse");
+    assert_eq!(again.front, page.front);
+    assert_eq!(again.body.trim(), "## Symptom\nIt failed.");
+}

@@ -120,6 +120,9 @@ pub struct Frontmatter {
     pub updated: Option<String>,
     /// Where the page came from (`session:<id>`, `run:<id>`).
     pub source: Option<String>,
+    /// Provenance list a harness pool records as `sources:`; kept apart from
+    /// `source` so a page read from such a pool renders back the same way.
+    pub sources: Vec<String>,
     /// Cited files.
     pub anchors: Vec<Anchor>,
 }
@@ -204,6 +207,7 @@ pub fn parse_frontmatter(text: &str) -> Result<(Frontmatter, String)> {
                     push_unique(&mut front.subjects, &normalize_subject(rest.trim()))
                 }
                 Some("depends") => push_unique(&mut front.depends, strip_quotes(rest.trim())),
+                Some("sources") => push_unique(&mut front.sources, strip_quotes(rest.trim())),
                 _ => {
                     return Err(Error::Frontmatter(format!(
                         "block list item under no key: {line:?}"
@@ -275,6 +279,14 @@ pub fn parse_frontmatter(text: &str) -> Result<(Frontmatter, String)> {
             "created" => front.created = non_empty(strip_quotes(value)),
             "updated" => front.updated = non_empty(strip_quotes(value)),
             "source" => front.source = non_empty(strip_quotes(value)),
+            // A harness pool records provenance as `sources:`, a list of
+            // `session:<id>` entries; accepting it makes such a pool readable.
+            "sources" => {
+                block_key = Some("sources".to_owned());
+                extend_inline(&mut front.sources, value, |entry| {
+                    strip_quotes(entry).to_owned()
+                });
+            }
             "anchors" => {
                 block_key = Some("anchors".to_owned());
                 for spec in inline_list(value) {
@@ -331,6 +343,12 @@ pub fn render(front: &Frontmatter, body: &str) -> String {
     }
     if let Some(source) = &front.source {
         out.push_str(&format!("source: {source}\n"));
+    }
+    if !front.sources.is_empty() {
+        out.push_str("sources:\n");
+        for source in &front.sources {
+            out.push_str(&format!("  - {source}\n"));
+        }
     }
     if !front.anchors.is_empty() {
         out.push_str("anchors:\n");
