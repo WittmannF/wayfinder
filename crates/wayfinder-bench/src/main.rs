@@ -475,6 +475,29 @@ fn run_series(context: &RunContext<'_>) -> Result<Vec<SessionRecord>> {
     Ok(sessions)
 }
 
+/// A failure that came from the endpoint rather than from the task.
+///
+/// A session that never reached the model produced no tokens and no answer, so
+/// charging it to an arm would compare one arm that ran against one that did not.
+fn is_infrastructure_failure(stderr: &str) -> bool {
+    let lowered = stderr.to_lowercase();
+    [
+        "no healthy upstream",
+        "econnrefused",
+        "econnreset",
+        "etimedout",
+        "socket hang up",
+        "fetch failed",
+        "connection error",
+        " 429",
+        " 502",
+        " 503",
+        " 504",
+    ]
+    .iter()
+    .any(|needle| lowered.contains(needle))
+}
+
 /// One finished session.
 struct SessionOutput {
     stdout: String,
@@ -485,6 +508,30 @@ struct SessionOutput {
 
 /// Run one headless session and fold its log.
 fn run_session(
+    context: &RunContext<'_>,
+    home: &Path,
+    worktree: &Path,
+    prompt: &str,
+    timeout_seconds: u64,
+) -> Result<SessionOutput> {
+    // Two retries absorb an endpoint hiccup without hiding a real task failure.
+    let mut attempt = 0;
+    loop {
+        let output = run_session_once(context, home, worktree, prompt, timeout_seconds)?;
+        attempt += 1;
+        if output.exit_code == 0 || attempt >= 3 || !is_infrastructure_failure(&output.stderr) {
+            return Ok(output);
+        }
+        eprintln!(
+            "  endpoint failure (attempt {attempt}); retrying: {}",
+            output.stderr.lines().next().unwrap_or_default()
+        );
+        std::thread::sleep(std::time::Duration::from_secs(15));
+    }
+}
+
+/// Run one headless session once.
+fn run_session_once(
     context: &RunContext<'_>,
     home: &Path,
     worktree: &Path,
@@ -1253,6 +1300,17 @@ mod tests {
         assert!(verify("run the coverage gate", &expect).is_err());
         assert!(verify("test:coverage needs 22.19", &expect).is_ok());
         assert!(verify("test:coverage, but first pnpm install", &expect).is_err());
+    }
+
+    #[test]
+    fn an_endpoint_outage_is_told_apart_from_a_task_failure() {
+        assert!(is_infrastructure_failure("Error: 503 no healthy upstream"));
+        assert!(is_infrastructure_failure("fetch failed: ECONNRESET"));
+        assert!(is_infrastructure_failure("HTTP status 429"));
+        assert!(!is_infrastructure_failure(
+            "the agent produced no tool calls"
+        ));
+        assert!(!is_infrastructure_failure(""));
     }
 
     #[test]
