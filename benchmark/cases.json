@@ -1,0 +1,220 @@
+{
+  "cases": [
+    {
+      "id": "ownership",
+      "title": "Package ownership: session-log persistence and its compression option",
+      "resume": "you investigated which package owns durable session-log persistence and how its encoding and `compression` option work",
+      "discovery": "You are onboarding onto an unfamiliar repository that you have just cloned.\n\nInvestigate which package owns durable session-log persistence, which source files implement the log encoding and its `compression` option, and what the option accepts and defaults to.\n\n## Rules\n- Investigate by reading files and searching the workspace. Do not modify, create, or delete any file outside your memory notes.\n- Be thorough enough that a later session could answer detailed follow-up questions from your notes alone, and stop investigating once you can: aim for about ten tool calls, not a full repository map.\n- When your investigation is complete, save what you learned as one or more durable memory pages with memory_save. Give each page a descriptive title and include the concrete paths, commands, and rules you found.\n- Finish with a short summary of what you saved.",
+      "followUps": [
+        {
+          "id": "compression-file",
+          "prompt": "Which package and which source file do I edit to add a new session-log compression encoding? Answer with the package directory path and the source file path.",
+          "expect": {
+            "all": [
+              "session-persistence-jsonl"
+            ],
+            "any": [
+              "format.ts",
+              "src/format.ts",
+              "packages/session/session-persistence-jsonl/src/format.ts"
+            ]
+          }
+        },
+        {
+          "id": "compression-config",
+          "prompt": "What configuration field selects the session-log encoding, what values does it accept, and which value is the default?",
+          "expect": {
+            "all": [
+              "compression",
+              "zstd"
+            ],
+            "any": [
+              "none"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "conventions",
+      "title": "House conventions: what adding a model-facing tool requires",
+      "resume": "you investigated what this repository requires when adding a new model-facing tool, including documentation, tests, and Agent Notes",
+      "discovery": "You are onboarding onto an unfamiliar repository that you have just cloned.\n\nInvestigate the repository rules for adding a new model-facing tool: which documentation must be updated, which tests and snapshot artifacts are required, what JSDoc and package-boundary conventions apply, and when an Agent Note is mandatory.\n\n## Rules\n- Investigate by reading files and searching the workspace. Do not modify, create, or delete any file outside your memory notes.\n- Be thorough enough that a later session could answer detailed follow-up questions from your notes alone, and stop investigating once you can: aim for about ten tool calls, not a full repository map.\n- When your investigation is complete, save what you learned as one or more durable memory pages with memory_save. Give each page a descriptive title and include the concrete paths, commands, and rules you found.\n- Finish with a short summary of what you saved.",
+      "followUps": [
+        {
+          "id": "tool-artifacts",
+          "prompt": "I am adding a new model-facing tool to this repository. List the documentation and test artifacts I must add or update, naming the concrete files or directories.",
+          "expect": {
+            "all": [
+              "tool-catalog"
+            ],
+            "any": [
+              ".agents/notes",
+              "snapshot",
+              "README"
+            ]
+          }
+        },
+        {
+          "id": "agent-note",
+          "prompt": "When is an Agent Note required, and when is it exempt?",
+          "expect": {
+            "all": [
+              "agent note"
+            ],
+            "any": [
+              "mechanical",
+              "non-trivial",
+              "trivial"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "commands",
+      "title": "Environment facts: the repository command surface",
+      "resume": "you investigated this repository's build, type-check, test, and coverage commands and the Node version range it supports",
+      "discovery": "You are onboarding onto an unfamiliar repository that you have just cloned.\n\nInvestigate this repository's command surface: the exact package-manager scripts for building, type-checking, running unit tests, and running the coverage gate, plus the Node version range the repository supports.\n\n## Rules\n- Investigate by reading files and searching the workspace. Do not modify, create, or delete any file outside your memory notes.\n- Be thorough enough that a later session could answer detailed follow-up questions from your notes alone, and stop investigating once you can: aim for about ten tool calls, not a full repository map.\n- When your investigation is complete, save what you learned as one or more durable memory pages with memory_save. Give each page a descriptive title and include the concrete paths, commands, and rules you found.\n- Finish with a short summary of what you saved.",
+      "followUps": [
+        {
+          "id": "coverage-and-typecheck",
+          "prompt": "Give me the exact commands to run the coverage gate and to type-check the repository, and state the Node version range this repository supports.",
+          "expect": {
+            "all": [
+              "test:coverage",
+              "typecheck"
+            ],
+            "any": [
+              "22.19",
+              ">=24"
+            ]
+          }
+        },
+        {
+          "id": "unit-tests",
+          "prompt": "Which command runs the unit test suite, and which file configures that runner?",
+          "expect": {
+            "all": [
+              "test"
+            ],
+            "any": [
+              "vitest.config.ts",
+              "vitest",
+              "package.json"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "format-version",
+      "title": "Decision recall: session-log format versioning and migrations",
+      "resume": "you investigated how this repository versions its durable session-log format and what migrations require",
+      "discovery": "You are onboarding onto an unfamiliar repository that you have just cloned.\n\nInvestigate how this repository versions its durable session-log format: what `SESSION_FORMAT_VERSION` means, what required-on-read events are and how the `ignorable` envelope flag changes handling, the rules for migrations and released generations, and which document owns the mechanism.\n\n## Rules\n- Investigate by reading files and searching the workspace. Do not modify, create, or delete any file outside your memory notes.\n- Be thorough enough that a later session could answer detailed follow-up questions from your notes alone, and stop investigating once you can: aim for about ten tool calls, not a full repository map.\n- When your investigation is complete, save what you learned as one or more durable memory pages with memory_save. Give each page a descriptive title and include the concrete paths, commands, and rules you found.\n- Finish with a short summary of what you saved.",
+      "followUps": [
+        {
+          "id": "event-change",
+          "prompt": "We are adding a required field to an existing session event. What must we bump, what must we never do to committed released generations, and how do older builds handle the new event?",
+          "expect": {
+            "all": [
+              "session_format_version"
+            ],
+            "any": [
+              "ignorable",
+              "migration"
+            ]
+          }
+        },
+        {
+          "id": "mechanism-doc",
+          "prompt": "Which document owns the session-log version mechanism, and what is the repository rule for released format generations?",
+          "expect": {
+            "all": [
+              "version"
+            ],
+            "any": [
+              "migration",
+              "adjacent",
+              "note"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "stale-page",
+      "title": "Stale page: the file a discovery session cited changes before the follow-ups",
+      "resume": "you investigated the Agent Note file format and lifecycle rules, including the status line, the folders a note moves between, and where archived notes live",
+      "discovery": "You are onboarding onto an unfamiliar repository that you have just cloned.\n\nInvestigate how an Agent Note file is written and where it lives: the exact header lines it opens with, the `Status:` values it may carry and how they relate to its folder, the classes it may declare, and where an archived note lives and what archival changes.\n\n## Rules\n- Investigate by reading files and searching the workspace. Do not modify, create, or delete any file outside your memory notes.\n- Be thorough enough that a later session could answer detailed follow-up questions from your notes alone, and stop investigating once you can: aim for about ten tool calls, not a full repository map.\n- When your investigation is complete, save what you learned as one or more durable memory pages with memory_save. Give each page a descriptive title and include the concrete paths, commands, and rules you found.\n- Finish with a short summary of what you saved.",
+      "afterDiscovery": [
+        {
+          "path": ".agents/notes/README.md",
+          "append": "\n## Note maintenance during a release\n\nA release review re-reads every active `implemented/` note whose decision the release touches. It corrects facts only: the note keeps its `Status:` line, its `{lifecycle}/{class}/` path, and the three-line header described above, while the paths, package names, and defaults it records move with the code that moved them. A note whose decision the release supersedes is not rewritten into its opposite — a new note records the supersession and the two are cross-linked.\n"
+        }
+      ],
+      "followUps": [
+        {
+          "id": "note-header",
+          "prompt": "What are the first three lines of an Agent Note file, and which `Status:` values may its status line carry?",
+          "expect": {
+            "all": [
+              "status:"
+            ],
+            "any": [
+              "proposed",
+              "implemented",
+              "rejected"
+            ]
+          }
+        },
+        {
+          "id": "note-folder",
+          "prompt": "How must an Agent Note's `Status:` value relate to the folder the note sits in, and where does an archived note live?",
+          "expect": {
+            "all": [
+              "archived"
+            ],
+            "any": [
+              "folder",
+              "lifecycle",
+              "status"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "fan-out",
+      "title": "Fan-out: one prompt asking two questions about the same package",
+      "resume": "you investigated the package that serves whole-log session conversation figures, the projection key it registers, what must be composed beside it, and which logged events feed its fields",
+      "discovery": "You are onboarding onto an unfamiliar repository that you have just cloned.\n\nInvestigate the package that serves whole-log session conversation figures — turn and step counts plus model, tool, first-token, and decode wall times: which package directory provides it, what projection key it registers, which companion packages must be composed for it to register at all, which logged events feed each figure, and which source files declare the projection key and implement the fold.\n\n## Rules\n- Investigate by reading files and searching the workspace. Do not modify, create, or delete any file outside your memory notes.\n- Be thorough enough that a later session could answer detailed follow-up questions from your notes alone, and stop investigating once you can: aim for about ten tool calls, not a full repository map.\n- When your investigation is complete, save what you learned as one or more durable memory pages with memory_save. Give each page a descriptive title and include the concrete paths, commands, and rules you found.\n- Finish with a short summary of what you saved.",
+      "followUps": [
+        {
+          "id": "stats-package",
+          "prompt": "Answer both questions in one reply, for the package that serves whole-log session conversation figures: (1) what projection key does it register, and which companion package must be composed beside it for it to register? (2) which logged tool events feed its tool-time figure?",
+          "expect": {
+            "all": [
+              "sessionStats",
+              "tool/call"
+            ],
+            "any": [
+              "session-projection",
+              "projection registry"
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "overhead": {
+    "id": "overhead",
+    "title": "Fixed overhead: one trivial question, no investigation",
+    "prompt": "Reply with exactly one word: pong",
+    "expect": {
+      "all": [
+        "pong"
+      ]
+    }
+  }
+}

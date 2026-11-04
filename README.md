@@ -78,6 +78,20 @@ manifests; 18 skipped directory names; anchors on the manifest and README; one
 Next: the benchmark against no tool, the harness LLM Wiki, and graphify. See
 [PLAN.md](PLAN.md).
 
+## Benchmark
+
+`wayfinder-bench` runs four tool surfaces through one agent loop and one model:
+no tool, the Factored Harness's own LLM Wiki, graphify, and wayfinder, over the six
+cases the harness benchmark defines. Each arm gets its own git worktree, its own
+home, and its own tool surface; the only difference between arms is what the model
+can call.
+
+```console
+$ cargo build --release
+$ ./target/release/wayfinder-bench --plan --repo <checkout> --arms none,llm-wiki,wayfinder,graphify
+$ ./target/release/wayfinder-bench --repo <checkout> --repeats 3 --out benchmark/results/run-1
+```
+
 ## Development
 
 ```console

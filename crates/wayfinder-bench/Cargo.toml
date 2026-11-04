@@ -1,0 +1,18 @@
+[package]
+name = "wayfinder-bench"
+description = "Benchmark four memory tool surfaces on one agent loop and one model"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "wayfinder-bench"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
