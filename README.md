@@ -78,6 +78,25 @@ manifests; 18 skipped directory names; anchors on the manifest and README; one
 Next: the benchmark against no tool, the harness LLM Wiki, and graphify. See
 [PLAN.md](PLAN.md).
 
+## Quickstart
+
+```console
+$ cargo install --path crates/wayfinder        # or: cargo build --release
+$ wayfinder init                              # create .wayfinder/
+$ wayfinder seed --structure                  # one page per package, from files only
+$ wayfinder install claude                    # MCP entry + instructions for your harness
+```
+
+`install` merges into what is already there and tells you what it left alone. Start a
+new session in the harness afterwards; the agent gets `memory_search`,
+`memory_read`, `memory_save`, `memory_list`, `memory_check`, `memory_digest`, and
+`memory_graph`, plus an instruction block that says when to use them. A harness that
+already owns `memory_*` names can run `wayfinder mcp --prefix wayfinder`.
+
+Commit `.wayfinder/memory/` with the repository: the pages are the durable part and a
+reviewer can read them in a diff. The index (`.wayfinder/index.db`) is derived — add
+it to `.gitignore` if you prefer; deleting it costs one scan.
+
 ## Benchmark
 
 `wayfinder-bench` runs four tool surfaces through one agent loop and one model:
