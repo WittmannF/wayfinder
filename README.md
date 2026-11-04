@@ -14,7 +14,8 @@ $ wayfinder search "how many requests per second"
 $ wayfinder read rate-limits --section Throughput
 $ wayfinder save --title "Rate limits" --body - --anchor src/limiter.rs:42
 $ wayfinder check
-$ wayfinder graph --format html --out graph.html
+$ wayfinder graph --format html --out graph.html --open
+$ wayfinder graph --format html --out graph.html --watch   # rewrite on every change
 ```
 
 ## Why it pays
@@ -38,8 +39,13 @@ the workspace at all. Wayfinder is that feature set with the harness left out.
 - **Revision-safe concurrent writes.** A page's revision is a content hash; a save
   carrying a stale `--expected-rev` is refused instead of clobbering another agent.
 - **A prompt digest.** `digest` prints the block that tells a session the pool exists.
-- **A graph.** `graph --format svg|html|json|dot|mermaid` draws pages, subjects, cited
-  paths, and the relations between them.
+- **A graph you can click.** `graph --format html` writes one self-contained page: the
+  pool drawn as a knowledge graph, where a node opens its title, kind, freshness, tags,
+  and excerpt; kind and subject filters and a text filter narrow it; clusters name the
+  pages a budget hid; a banner counts the pages whose cited file changed. `--watch`
+  rewrites the file while a pool is being written to, so a second screen stays current.
+  No CDN, no build step, no network — it opens from disk on an offline machine. Static
+  exports stay available: `svg`, `json`, `dot`, `mermaid`.
 - **A pool on day one.** `seed --structure` writes one pointer page per package from
   its manifest and README — no model, no tokens. `seed --pages` replaces those pointers
   with pages a model wrote from reading the code, behind a plan that states the spend
@@ -142,6 +148,6 @@ $ ./target/release/wayfinder-bench --repo <checkout> --repeats 3 --out benchmark
 ## Development
 
 ```console
-$ cargo test          # 51 tests: store, index, search, anchors, graph, CLI, MCP, install, seed
+$ cargo test          # 64 tests: store, index, search, anchors, graph, viewer, CLI, MCP, install, seed
 $ cargo build --release
 ```

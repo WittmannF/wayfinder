@@ -42,6 +42,37 @@ pub struct GraphNode {
     /// Pages this node aggregates when a bound hid them.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub count: Option<usize>,
+    /// Tags the page declares, for the viewer's detail panel.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tags: Option<Vec<String>>,
+    /// Opening lines of the page body, for the viewer's detail panel.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub excerpt: Option<Vec<String>>,
+    /// Whether another page in this graph declares that it replaces this one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub superseded: Option<bool>,
+    /// Page ids a cluster node stands for, so the viewer can name them.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hidden: Option<Vec<String>>,
+}
+
+impl GraphNode {
+    /// A node that carries nothing beyond its face.
+    fn plain(id: String, kind: NodeKind, label: String) -> Self {
+        Self {
+            id,
+            kind,
+            label,
+            page_kind: None,
+            updated: None,
+            freshness: None,
+            count: None,
+            tags: None,
+            excerpt: None,
+            superseded: None,
+            hidden: None,
+        }
+    }
 }
 
 /// One edge of the graph.
@@ -144,10 +175,6 @@ pub fn build_graph(store: &Store, bounds: GraphBounds, subject: Option<&str>) ->
     }
 
     for page in keep {
-        if drawn >= bounds.pages {
-            truncated = true;
-            break;
-        }
         let id = format!("page:{}", page.id);
         let check = crate::anchors::check_page(store.root(), page).ok();
         let freshness = check.map(|report| {
@@ -161,7 +188,10 @@ pub fn build_graph(store: &Store, bounds: GraphBounds, subject: Option<&str>) ->
                 "unverified".to_owned()
             }
         });
-        if nodes.len() < bounds.nodes {
+        let superseded = pages
+            .iter()
+            .any(|other| other.front.supersedes.as_deref() == Some(page.id.as_str()));
+        if drawn < bounds.pages && nodes.len() < bounds.nodes {
             nodes.insert(
                 id.clone(),
                 GraphNode {
@@ -172,11 +202,37 @@ pub fn build_graph(store: &Store, bounds: GraphBounds, subject: Option<&str>) ->
                     updated: page.front.updated.clone(),
                     freshness,
                     count: None,
+                    tags: (!page.front.tags.is_empty()).then(|| page.front.tags.clone()),
+                    excerpt: Some(excerpt_of(&page.body)),
+                    superseded: superseded.then_some(true),
+                    hidden: None,
                 },
             );
             drawn += 1;
         } else {
+            // The page budget is spent: the page joins the cluster its lowest
+            // subject hub carries, so the drawing still says it exists.
             truncated = true;
+            let hub = page
+                .front
+                .subjects
+                .iter()
+                .map(|subject| format!("subject:{subject}"))
+                .min()
+                .unwrap_or_else(|| "cluster:pages".to_owned());
+            let hub_id = if nodes.contains_key(&hub) {
+                hub
+            } else {
+                "cluster:pages".to_owned()
+            };
+            let entry = nodes.entry(hub_id.clone()).or_insert_with(|| {
+                GraphNode::plain(hub_id.clone(), NodeKind::Subject, "hidden pages".to_owned())
+            });
+            entry.count = Some(entry.count.unwrap_or(0) + 1);
+            let hidden = entry.hidden.get_or_insert_with(Vec::new);
+            if hidden.len() < 50 {
+                hidden.push(page.id.clone());
+            }
         }
         for subject in &page.front.subjects {
             push_edge(
@@ -190,14 +246,12 @@ pub fn build_graph(store: &Store, bounds: GraphBounds, subject: Option<&str>) ->
             );
             nodes
                 .entry(format!("subject:{subject}"))
-                .or_insert(GraphNode {
-                    id: format!("subject:{subject}"),
-                    kind: NodeKind::Subject,
-                    label: subject.clone(),
-                    page_kind: None,
-                    updated: None,
-                    freshness: None,
-                    count: None,
+                .or_insert_with(|| {
+                    GraphNode::plain(
+                        format!("subject:{subject}"),
+                        NodeKind::Subject,
+                        subject.clone(),
+                    )
                 });
         }
         for anchor in &page.front.anchors {
@@ -211,15 +265,9 @@ pub fn build_graph(store: &Store, bounds: GraphBounds, subject: Option<&str>) ->
                 "cites",
                 &mut truncated,
             );
-            nodes.entry(path_id.clone()).or_insert(GraphNode {
-                id: path_id,
-                kind: NodeKind::Path,
-                label: anchor.path.clone(),
-                page_kind: None,
-                updated: None,
-                freshness: None,
-                count: None,
-            });
+            nodes
+                .entry(path_id.clone())
+                .or_insert_with(|| GraphNode::plain(path_id, NodeKind::Path, anchor.path.clone()));
         }
         for dependency in &page.front.depends {
             // A dependency is the same node a page declaring that package as a
@@ -234,14 +282,8 @@ pub fn build_graph(store: &Store, bounds: GraphBounds, subject: Option<&str>) ->
                 "depends",
                 &mut truncated,
             );
-            nodes.entry(target.clone()).or_insert(GraphNode {
-                id: target.clone(),
-                kind: NodeKind::Subject,
-                label: format!("package:{dependency}"),
-                page_kind: None,
-                updated: None,
-                freshness: None,
-                count: None,
+            nodes.entry(target.clone()).or_insert_with(|| {
+                GraphNode::plain(target, NodeKind::Subject, format!("package:{dependency}"))
             });
         }
         if let Some(supersedes) = &page.front.supersedes {
@@ -395,7 +437,7 @@ pub fn render_graph(view: &GraphView, format: GraphFormat) -> Result<String> {
         GraphFormat::Json => serde_json::to_string_pretty(view).unwrap_or_else(|_| "{}".to_owned()),
         GraphFormat::Dot => render_dot(view),
         GraphFormat::Svg => render_svg(view),
-        GraphFormat::Html => render_html(view),
+        GraphFormat::Html => crate::viewer::render_viewer_html(view),
         GraphFormat::Mermaid => render_mermaid(view),
     })
 }
@@ -504,25 +546,6 @@ fn render_svg(view: &GraphView) -> String {
     out
 }
 
-/// An HTML page wrapping the SVG, so one file opens in a browser.
-fn render_html(view: &GraphView) -> String {
-    let svg = render_svg(view);
-    format!(
-        "<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\"><title>wayfinder graph</title>\n\
-         <style>body{{margin:0;background:#0f1115;color:#c8d0dc;font-family:-apple-system,Segoe UI,Helvetica,sans-serif}}\n\
-         header{{padding:16px 20px;border-bottom:1px solid #1d232e}}h1{{margin:0;font-size:15px;font-weight:600}}\n\
-         p{{margin:4px 0 0;color:#8b95a5;font-size:12px}}svg{{display:block;max-width:100%;height:auto}}</style>\n\
-         </head><body><header><h1>{}</h1><p>{} pages · {} edges · pool {}</p></header>{svg}</body></html>\n",
-        "wayfinder knowledge graph",
-        view.nodes
-            .iter()
-            .filter(|node| node.kind == NodeKind::Page)
-            .count(),
-        view.edges.len(),
-        escape_xml(&view.root),
-    )
-}
-
 /// Mermaid flowchart, which renders inside markdown a harness displays.
 fn render_mermaid(view: &GraphView) -> String {
     let mut out = String::from("flowchart LR\n");
@@ -571,6 +594,16 @@ fn escape_xml(value: &str) -> String {
         .replace('<', "&lt;")
         .replace('>', "&gt;")
         .replace('"', "&quot;")
+}
+
+/// Opening lines of one page, for the viewer's detail panel.
+fn excerpt_of(body: &str) -> Vec<String> {
+    body.lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with('#'))
+        .take(6)
+        .map(|line| short(line, 120))
+        .collect()
 }
 
 /// Trim a label to a bounded width.

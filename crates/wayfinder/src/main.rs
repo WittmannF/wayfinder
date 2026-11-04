@@ -104,6 +104,12 @@ enum Command {
         /// Draw only one subject's neighbourhood.
         #[arg(long)]
         subject: Option<String>,
+        /// Rewrite the file when the pool changes, until interrupted.
+        #[arg(long)]
+        watch: bool,
+        /// Hand the written file to the platform opener.
+        #[arg(long)]
+        open: bool,
     },
     /// Rebuild the derived index from the page files.
     Reindex,
@@ -302,7 +308,9 @@ fn run(cli: Cli) -> Result<ExitCode> {
             format,
             out,
             subject,
-        } => graph(&open(&root)?, &format, out, subject),
+            watch,
+            open: open_file_now,
+        } => graph(&open(&root)?, &format, out, subject, watch, open_file_now),
         Command::Reindex => {
             let store = open(&root)?;
             let stats = store.reindex()?;
@@ -667,26 +675,111 @@ fn graph(
     format: &str,
     out: Option<PathBuf>,
     subject: Option<String>,
+    watch: bool,
+    open: bool,
 ) -> Result<ExitCode> {
     let format = GraphFormat::parse(format).ok_or_else(|| {
         anyhow::anyhow!("unknown format {format:?}; use json, dot, svg, html, or mermaid")
     })?;
-    let view = build_graph(store, GraphBounds::default(), subject.as_deref())
-        .map_err(|error| anyhow::anyhow!("{error}"))?;
-    let rendered = render_graph(&view, format).map_err(|error| anyhow::anyhow!("{error}"))?;
-    match out {
-        Some(path) => {
-            std::fs::write(&path, rendered).with_context(|| format!("write {}", path.display()))?;
-            println!(
-                "wayfinder: wrote {} ({} nodes, {} edges)",
-                path.display(),
-                view.nodes.len(),
-                view.edges.len()
-            );
+    let render = |store: &Store| -> Result<String> {
+        let view = build_graph(store, GraphBounds::default(), subject.as_deref())
+            .map_err(|error| anyhow::anyhow!("{error}"))?;
+        render_graph(&view, format).map_err(|error| anyhow::anyhow!("{error}"))
+    };
+
+    let Some(path) = out else {
+        if watch {
+            bail!("--watch rewrites a file, so it needs --out <FILE>");
         }
-        None => print!("{rendered}"),
+        print!("{}", render(store)?);
+        return Ok(ExitCode::SUCCESS);
+    };
+
+    write_report(store, &render, &path)?;
+    println!("wayfinder: wrote {}", path.display());
+    if open {
+        open_in_browser(&path);
     }
-    Ok(ExitCode::SUCCESS)
+    if !watch {
+        return Ok(ExitCode::SUCCESS);
+    }
+
+    println!(
+        "wayfinder: watching {} for changes; rewriting {} (Ctrl-C to stop)",
+        store.paths().memory.display(),
+        path.display()
+    );
+    let mut stamp = pool_stamp(&store.paths().memory);
+    loop {
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        let next = pool_stamp(&store.paths().memory);
+        if next == stamp {
+            continue;
+        }
+        stamp = next;
+        match write_report(store, &render, &path) {
+            Ok(()) => println!("wayfinder: pool changed, rewrote {}", path.display()),
+            Err(error) => eprintln!("wayfinder: rebuild failed: {error:#}"),
+        }
+    }
+}
+
+/// Render one graph and write it to disk.
+fn write_report(
+    store: &Store,
+    render: &impl Fn(&Store) -> Result<String>,
+    path: &Path,
+) -> Result<()> {
+    let rendered = render(store)?;
+    if let Some(parent) = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+    {
+        std::fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
+    }
+    std::fs::write(path, rendered).with_context(|| format!("write {}", path.display()))
+}
+
+/// A cheap fingerprint of the pool: file count, total size, newest mtime.
+///
+/// A poll beats a filesystem watcher here: the pool is a handful of files, and a
+/// watcher would need a dependency and a platform-specific event loop.
+fn pool_stamp(memory: &Path) -> (usize, u64, u128) {
+    let mut count = 0usize;
+    let mut bytes = 0u64;
+    let mut newest = 0u128;
+    if let Ok(entries) = std::fs::read_dir(memory) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|extension| extension.to_str()) != Some("md") {
+                continue;
+            }
+            count += 1;
+            if let Ok(meta) = std::fs::metadata(&path) {
+                bytes += meta.len();
+                if let Ok(modified) = meta.modified() {
+                    if let Ok(delta) = modified.duration_since(std::time::UNIX_EPOCH) {
+                        newest = newest.max(delta.as_nanos());
+                    }
+                }
+            }
+        }
+    }
+    (count, bytes, newest)
+}
+
+/// Hand one file to the platform's opener. A headless host has no opener, and
+/// that is not an error.
+fn open_in_browser(path: &Path) {
+    #[cfg(target_os = "macos")]
+    let command = "open";
+    #[cfg(target_os = "windows")]
+    let command = "explorer";
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let command = "xdg-open";
+    if let Err(error) = std::process::Command::new(command).arg(path).spawn() {
+        eprintln!("wayfinder: could not open {}: {error}", path.display());
+    }
 }
 
 fn status(store: &Store, json: bool) -> Result<ExitCode> {

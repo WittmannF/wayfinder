@@ -23,6 +23,7 @@ mod page;
 mod search;
 mod seed;
 mod store;
+mod viewer;
 
 pub use anchors::{AnchorState, AnchorVerdict, CheckReport, anchor_spec, check_page};
 pub use digest::{DigestOptions, digest};
@@ -43,3 +44,4 @@ pub use store::{
     AnchorInput, SaveRequest, SaveResult, Store, StorePaths, default_root, now_rfc3339,
     resolve_root,
 };
+pub use viewer::render_viewer_html;
