@@ -145,20 +145,22 @@ pub fn is_fresh(cache: &Cache, at: u64) -> bool {
 /// @param api - API URL, usually [`RELEASE_API`]
 /// @returns the tag, e.g. `v0.2.0`
 pub fn fetch_latest(api: &str) -> Result<String> {
-    let agent = ureq::AgentBuilder::new()
-        .timeout(Duration::from_secs(REFRESH_TIMEOUT_SECONDS))
+    let config = ureq::Agent::config_builder()
+        .timeout_global(Some(Duration::from_secs(REFRESH_TIMEOUT_SECONDS)))
         .build();
-    let response = agent
+    let agent = ureq::Agent::new_with_config(config);
+    let mut response = agent
         .get(api)
-        .set("accept", "application/vnd.github+json")
-        .set(
+        .header("accept", "application/vnd.github+json")
+        .header(
             "user-agent",
             concat!("wayfinder/", env!("CARGO_PKG_VERSION")),
         )
         .call()
         .map_err(|error| anyhow::anyhow!("release check failed: {error}"))?;
     let document: serde_json::Value = response
-        .into_json()
+        .body_mut()
+        .read_json()
         .map_err(|error| anyhow::anyhow!("release check returned no JSON: {error}"))?;
     document["tag_name"]
         .as_str()
@@ -284,12 +286,13 @@ pub fn upgrade(base: &str, api: &str) -> Result<String> {
 
 /// Fetch one URL into memory.
 fn download(url: &str) -> Result<Vec<u8>> {
-    let agent = ureq::AgentBuilder::new()
-        .timeout(Duration::from_secs(120))
+    let config = ureq::Agent::config_builder()
+        .timeout_global(Some(Duration::from_secs(120)))
         .build();
-    let response = agent
+    let agent = ureq::Agent::new_with_config(config);
+    let mut response = agent
         .get(url)
-        .set(
+        .header(
             "user-agent",
             concat!("wayfinder/", env!("CARGO_PKG_VERSION")),
         )
@@ -297,7 +300,8 @@ fn download(url: &str) -> Result<Vec<u8>> {
         .map_err(|error| anyhow::anyhow!("download failed for {url}: {error}"))?;
     let mut bytes = Vec::new();
     response
-        .into_reader()
+        .body_mut()
+        .as_reader()
         .take(64 * 1024 * 1024)
         .read_to_end(&mut bytes)
         .map_err(|error| anyhow::anyhow!("read failed for {url}: {error}"))?;

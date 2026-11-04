@@ -20,7 +20,7 @@
 <p align="center">
   <a href="https://github.com/zaterka/wayfinder/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/zaterka/wayfinder/actions/workflows/ci.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="License: Apache 2.0" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg"></a>
-  <a href="Cargo.toml"><img alt="Rust 1.85+" src="https://img.shields.io/badge/rust-1.85%2B-orange.svg"></a>
+  <a href="Cargo.toml"><img alt="Rust 1.89+" src="https://img.shields.io/badge/rust-1.89%2B-orange.svg"></a>
 </p>
 
 ![The Wayfinder viewer: a 47-page pool drawn as a knowledge graph, with one page selected](docs/viewer.png)

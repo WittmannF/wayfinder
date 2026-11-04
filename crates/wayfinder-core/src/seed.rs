@@ -338,15 +338,15 @@ fn read_cargo_manifest(text: &str) -> Option<(String, Option<String>, Vec<String
             continue;
         }
         if section == "package" {
-            if let Some(value) = trimmed.strip_prefix("name") {
-                if let Some(value) = value.trim_start().strip_prefix('=') {
-                    name = Some(value.trim().trim_matches('"').to_owned());
-                }
+            if let Some(value) = trimmed.strip_prefix("name")
+                && let Some(value) = value.trim_start().strip_prefix('=')
+            {
+                name = Some(value.trim().trim_matches('"').to_owned());
             }
-            if let Some(value) = trimmed.strip_prefix("description") {
-                if let Some(value) = value.trim_start().strip_prefix('=') {
-                    description = Some(value.trim().trim_matches('"').to_owned());
-                }
+            if let Some(value) = trimmed.strip_prefix("description")
+                && let Some(value) = value.trim_start().strip_prefix('=')
+            {
+                description = Some(value.trim().trim_matches('"').to_owned());
             }
         }
     }
@@ -375,33 +375,31 @@ fn read_python_manifest(text: &str) -> Option<(String, Option<String>, Vec<Strin
         if !(section == "project" || section == "tool.poetry") {
             continue;
         }
-        if let Some(value) = trimmed.strip_prefix("name") {
-            if let Some(value) = value.trim_start().strip_prefix('=') {
-                name = Some(value.trim().trim_matches('"').to_owned());
-            }
+        if let Some(value) = trimmed.strip_prefix("name")
+            && let Some(value) = value.trim_start().strip_prefix('=')
+        {
+            name = Some(value.trim().trim_matches('"').to_owned());
         }
-        if let Some(value) = trimmed.strip_prefix("description") {
-            if let Some(value) = value.trim_start().strip_prefix('=') {
-                description = Some(value.trim().trim_matches('"').to_owned());
-            }
+        if let Some(value) = trimmed.strip_prefix("description")
+            && let Some(value) = value.trim_start().strip_prefix('=')
+        {
+            description = Some(value.trim().trim_matches('"').to_owned());
         }
-        if let Some(value) = trimmed.strip_prefix("dependencies") {
-            if let Some(list) = value.trim().strip_prefix('=').map(str::trim) {
-                if let Some(inner) = list
-                    .strip_prefix('[')
-                    .and_then(|rest| rest.strip_suffix(']'))
-                {
-                    for entry in inner.split(',') {
-                        let entry = entry.trim().trim_matches('"').trim_matches('\'');
-                        let entry = entry
-                            .split(['>', '<', '=', ' ', '['])
-                            .next()
-                            .unwrap_or("")
-                            .trim();
-                        if !entry.is_empty() {
-                            dependencies.push(entry.to_owned());
-                        }
-                    }
+        if let Some(value) = trimmed.strip_prefix("dependencies")
+            && let Some(list) = value.trim().strip_prefix('=').map(str::trim)
+            && let Some(inner) = list
+                .strip_prefix('[')
+                .and_then(|rest| rest.strip_suffix(']'))
+        {
+            for entry in inner.split(',') {
+                let entry = entry.trim().trim_matches('"').trim_matches('\'');
+                let entry = entry
+                    .split(['>', '<', '=', ' ', '['])
+                    .next()
+                    .unwrap_or("")
+                    .trim();
+                if !entry.is_empty() {
+                    dependencies.push(entry.to_owned());
                 }
             }
         }
@@ -480,11 +478,11 @@ pub fn seed_structure(store: &Store, limit: Option<usize>, run: &str) -> Result<
     let mut report = StructureReport::default();
     for package in packages {
         let id = package.page_id();
-        if let Ok(page) = store.read(&id) {
-            if page.front.kind.is_some_and(|kind| kind != Kind::Pointer) {
-                report.skipped += 1;
-                continue;
-            }
+        if let Ok(page) = store.read(&id)
+            && page.front.kind.is_some_and(|kind| kind != Kind::Pointer)
+        {
+            report.skipped += 1;
+            continue;
         }
         let request = SaveRequest {
             id: Some(id.clone()),

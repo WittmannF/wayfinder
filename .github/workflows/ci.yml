@@ -44,3 +44,52 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --all --locked
       - run: cargo build --release --locked
+
+  msrv:
+    # The floor in Cargo.toml is a promise; this job keeps it honest. It reads the
+    # version the manifest declares instead of hard-coding a second copy.
+    name: msrv
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: read the declared minimum
+        id: floor
+        run: |
+          version="$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "building with the declared minimum: $version"
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.floor.outputs.version }}
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --locked --all-targets
+      - run: cargo test --locked
+
+  wheel:
+    # The Python package ships a binary and a thin shim; prove it installs and runs
+    # on the oldest and newest interpreters it claims to support.
+    name: wheel (py${{ matrix.python }})
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.11', '3.14']
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: cargo build --release --locked -p wayfinder
+      - name: build, install and run the wheel
+        run: |
+          cp target/release/wayfinder python/src/wayfinder_cli/bin/wayfinder
+          python -m pip install --upgrade build
+          python -m build --wheel --outdir dist python
+          python -m venv venv
+          ./venv/bin/pip install dist/*.whl
+          ./venv/bin/wayfinder --version
+          ./venv/bin/wayfinder --help | head -3

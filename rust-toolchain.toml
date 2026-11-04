@@ -1,0 +1,6 @@
+# Local development matches CI: stable Rust with the two components the checks use.
+# The crate's MSRV is declared separately in Cargo.toml (`rust-version`) and proven
+# by the `msrv` CI job.
+[toolchain]
+channel = "stable"
+components = ["rustfmt", "clippy"]

@@ -778,10 +778,10 @@ fn pool_stamp(memory: &Path) -> (usize, u64, u128) {
             count += 1;
             if let Ok(meta) = std::fs::metadata(&path) {
                 bytes += meta.len();
-                if let Ok(modified) = meta.modified() {
-                    if let Ok(delta) = modified.duration_since(std::time::UNIX_EPOCH) {
-                        newest = newest.max(delta.as_nanos());
-                    }
+                if let Ok(modified) = meta.modified()
+                    && let Ok(delta) = modified.duration_since(std::time::UNIX_EPOCH)
+                {
+                    newest = newest.max(delta.as_nanos());
                 }
             }
         }

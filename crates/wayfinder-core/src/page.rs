@@ -219,19 +219,18 @@ pub fn parse_frontmatter(text: &str) -> Result<(Frontmatter, String)> {
         // Fields of one anchor are indented under its `- path` item; a new
         // top-level key closes it.
         let indented = line.starts_with(' ') || line.starts_with('\t');
-        if indented {
-            if let Some(current) = anchor.as_mut() {
-                if let Some((key, value)) = line.trim().split_once(':') {
-                    let value = strip_quotes(value.trim());
-                    match key.trim() {
-                        "path" => current.path = value.to_owned(),
-                        "line" => current.line = value.parse().ok(),
-                        "sha" => current.sha = Some(value.to_ascii_lowercase()),
-                        _ => {}
-                    }
-                    continue;
-                }
+        if indented
+            && let Some(current) = anchor.as_mut()
+            && let Some((key, value)) = line.trim().split_once(':')
+        {
+            let value = strip_quotes(value.trim());
+            match key.trim() {
+                "path" => current.path = value.to_owned(),
+                "line" => current.line = value.parse().ok(),
+                "sha" => current.sha = Some(value.to_ascii_lowercase()),
+                _ => {}
             }
+            continue;
         }
         let Some((key, value)) = line.split_once(':') else {
             return Err(Error::Frontmatter(format!(

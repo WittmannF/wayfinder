@@ -67,19 +67,20 @@ impl PageWriter for HttpPageWriter {
                 { "role": "user", "content": request.prompt },
             ],
         });
-        let agent = ureq::AgentBuilder::new()
-            .timeout(Duration::from_secs(self.endpoint.timeout_seconds))
+        let config = ureq::Agent::config_builder()
+            .timeout_global(Some(Duration::from_secs(self.endpoint.timeout_seconds)))
             .build();
+        let agent = ureq::Agent::new_with_config(config);
         let mut call = agent
             .post(&self.endpoint.url)
-            .set("content-type", "application/json");
+            .header("content-type", "application/json");
         if !self.endpoint.key.is_empty() {
-            call = call.set("authorization", &format!("Bearer {}", self.endpoint.key));
+            call = call.header("authorization", format!("Bearer {}", self.endpoint.key));
         }
-        let response = call.send_json(body).map_err(|error| {
+        let mut response = call.send_json(body).map_err(|error| {
             wayfinder_core::Error::Invalid(format!("model call failed: {error}"))
         })?;
-        let document: serde_json::Value = response.into_json().map_err(|error| {
+        let document: serde_json::Value = response.body_mut().read_json().map_err(|error| {
             wayfinder_core::Error::Invalid(format!("model answer was not JSON: {error}"))
         })?;
         let body = document["choices"][0]["message"]["content"]

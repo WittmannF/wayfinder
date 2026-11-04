@@ -202,11 +202,11 @@ impl Index {
                 Ok(page) => page,
                 Err(_) => continue,
             };
-            if let Some(rev) = known {
-                if rev == page.rev() {
-                    stats.unchanged += 1;
-                    continue;
-                }
+            if let Some(rev) = known
+                && rev == page.rev()
+            {
+                stats.unchanged += 1;
+                continue;
             }
             write_page(&transaction, &page, stamp)?;
             stats.indexed += 1;
