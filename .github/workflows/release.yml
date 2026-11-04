@@ -33,12 +33,12 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.triples }}
-      - uses: Swatinem/rust-cache@v2
-      - uses: actions/setup-python@v5
+      - uses: Swatinem/rust-cache@v2.9.3
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.14'
 
@@ -94,7 +94,7 @@ jobs:
           ls -l dist/wheels/*/
 
       - name: upload the release assets
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: assets-${{ matrix.group }}
           path: |
@@ -102,7 +102,7 @@ jobs:
             dist/wayfinder-*.tar.gz.sha256
           if-no-files-found: error
       - name: upload the wheels
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: wheel-${{ matrix.group }}
           path: dist/wheels/**/*.whl
@@ -112,7 +112,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: dist
           pattern: assets-*
@@ -140,7 +140,7 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: wheels
           pattern: wheel-*
