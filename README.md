@@ -1,5 +1,10 @@
 <p align="center">
-  <strong>wayfinder</strong><br>
+  <h1 align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="images/logo-dark.svg">
+    <img src="images/logo-light.svg" alt="wayfinder" width="360">
+  </picture>
+</h1>
   <sub>A hybrid of a self-generating knowledge graph and the LLM Wiki — written by your agents, read back by the next session.</sub>
 </p>
 
