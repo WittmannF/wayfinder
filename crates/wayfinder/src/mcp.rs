@@ -112,7 +112,14 @@ pub fn handle(store: &Store, prefix: Prefix, request: &Value) -> Option<Value> {
         "tools/list" => Ok(json!({ "tools": tool_list(prefix) })),
         "tools/call" => call_tool(store, prefix, &params),
         "resources/list" => Ok(json!({ "resources": [] })),
-        "prompts/list" => Ok(json!({ "prompts": [] })),
+        "prompts/list" => Ok(json!({
+            "prompts": [{
+                "name": "workspace-memory",
+                "description": "What this workspace's memory holds, and how to search it before re-deriving anything.",
+                "arguments": [],
+            }],
+        })),
+        "prompts/get" => prompt(store, &params),
         other => Err((-32601, format!("unknown method {other:?}"))),
     };
     Some(match response {
@@ -227,6 +234,28 @@ fn tool_list(prefix: Prefix) -> Vec<Value> {
             },
         }),
     ]
+}
+
+/// Answer `prompts/get`: a client that surfaces prompts can paste the digest into
+/// the conversation without the model spending a tool call.
+fn prompt(store: &Store, params: &Value) -> std::result::Result<Value, (i64, String)> {
+    let name = params
+        .get("name")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    if name != "workspace-memory" {
+        return Err((-32602, format!("unknown prompt {name:?}")));
+    }
+    let text = digest(store, DigestOptions::default()).map_err(internal)?;
+    let text = if text.is_empty() {
+        "This workspace's memory pool is empty; nothing has been saved yet.".to_owned()
+    } else {
+        text
+    };
+    Ok(json!({
+        "description": "Workspace memory digest",
+        "messages": [{ "role": "user", "content": { "type": "text", "text": text } }],
+    }))
 }
 
 /// Dispatch one `tools/call`.

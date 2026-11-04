@@ -290,3 +290,37 @@ fn a_notification_gets_no_answer() {
     assert_eq!(answers.len(), 1, "{answers:#?}");
     assert_eq!(answers[0]["id"], 50);
 }
+
+#[test]
+fn a_client_can_pull_the_digest_as_a_prompt() {
+    let directory = project();
+    let answers = exchange(
+        directory.path(),
+        &[
+            json!({ "jsonrpc": "2.0", "id": 60, "method": "prompts/list" }),
+            json!({ "jsonrpc": "2.0", "id": 61, "method": "prompts/get", "params": { "name": "workspace-memory" } }),
+            call(
+                62,
+                "memory_save",
+                json!({ "title": "Rate limits", "body": "100 per second" }),
+            ),
+            json!({ "jsonrpc": "2.0", "id": 63, "method": "prompts/get", "params": { "name": "workspace-memory" } }),
+            json!({ "jsonrpc": "2.0", "id": 64, "method": "prompts/get", "params": { "name": "nope" } }),
+        ],
+    );
+    let prompts = answers[0]["result"]["prompts"].as_array().expect("prompts");
+    assert_eq!(prompts[0]["name"], "workspace-memory");
+    // An empty pool still answers, so a client can surface it unconditionally.
+    let empty = answers[1]["result"]["messages"][0]["content"]["text"]
+        .as_str()
+        .expect("text");
+    assert!(empty.contains("pool is empty"), "{empty}");
+
+    let filled = answers[3]["result"]["messages"][0]["content"]["text"]
+        .as_str()
+        .expect("text");
+    assert!(filled.contains("1 memory page"), "{filled}");
+    assert!(filled.contains("Rate limits"), "{filled}");
+    // An unknown prompt is an invalid-parameter error, not a prompt.
+    assert_eq!(answers[4]["error"]["code"], -32602);
+}
