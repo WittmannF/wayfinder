@@ -20,10 +20,10 @@ jobs:
           - os: ubuntu-24.04-arm
             target: linux-arm64
             triple: aarch64-unknown-linux-gnu
-          - os: macos-14
+          - os: macos-15
             target: macos-arm64
             triple: aarch64-apple-darwin
-          - os: macos-13
+          - os: macos-15-intel
             target: macos-x86_64
             triple: x86_64-apple-darwin
     runs-on: ${{ matrix.os }}
@@ -31,6 +31,18 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      - name: verify the runner matches the target architecture
+        run: |
+          host="$(rustc -vV | sed -n 's/^host: //p')"
+          case "${{ matrix.target }}" in
+            *-x86_64) want="x86_64" ;;
+            *-arm64) want="aarch64" ;;
+            *) echo "unknown target ${{ matrix.target }}" >&2; exit 1 ;;
+          esac
+          case "$host" in
+            "$want"-*) echo "host $host matches ${{ matrix.target }}" ;;
+            *) echo "::error::runner host $host cannot build ${{ matrix.target }}; a mislabelled artefact would ship to the wrong platform"; exit 1 ;;
+          esac
       - name: build the released binaries
         run: |
           cargo build --release --locked -p wayfinder -p wayfinder-bench
@@ -60,9 +72,9 @@ jobs:
             target: linux-x86_64
           - os: ubuntu-24.04-arm
             target: linux-arm64
-          - os: macos-14
+          - os: macos-15
             target: macos-arm64
-          - os: macos-13
+          - os: macos-15-intel
             target: macos-x86_64
     runs-on: ${{ matrix.os }}
     steps:
@@ -72,6 +84,18 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: verify the runner matches the target architecture
+        run: |
+          host="$(rustc -vV | sed -n 's/^host: //p')"
+          case "${{ matrix.target }}" in
+            *-x86_64) want="x86_64" ;;
+            *-arm64) want="aarch64" ;;
+            *) echo "unknown target ${{ matrix.target }}" >&2; exit 1 ;;
+          esac
+          case "$host" in
+            "$want"-*) echo "host $host matches ${{ matrix.target }}" ;;
+            *) echo "::error::runner host $host cannot build ${{ matrix.target }}; a mislabelled artefact would ship to the wrong platform"; exit 1 ;;
+          esac
       - name: build the binary and wrap it in a platform wheel
         run: |
           cargo build --release --locked -p wayfinder
@@ -98,9 +122,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # A re-run after a fixed job finds the release already there; replace
+          # its assets instead of failing on it.
           gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
             --title "wayfinder $GITHUB_REF_NAME" --generate-notes \
-            dist/*.tar.gz dist/*.sha256
+            dist/*.tar.gz dist/*.sha256 \
+            || gh release upload "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --clobber \
+                 dist/*.tar.gz dist/*.sha256
 
   pypi:
     # Trusted publishing: PyPI verifies this workflow through OIDC, so no API
