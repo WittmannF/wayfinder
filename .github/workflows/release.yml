@@ -13,9 +13,10 @@ env:
 jobs:
   build:
     # One job per platform does everything that platform can do: the tarball, its
-    # checksum, and the platform wheel. Splitting wheels into their own matrix
-    # doubled the number of macOS runners a release asked for, and macOS runners
-    # are the scarce ones.
+    # checksum, and the platform wheel. The Intel macOS binary is cross-compiled on
+    # the arm64 image: GitHub's macos-15-intel standard runner queues without
+    # starting, and it is retired in 2027 anyway, so one Apple runner produces both
+    # Mac artefacts.
     name: build (${{ matrix.target }})
     strategy:
       fail-fast: false
@@ -23,41 +24,46 @@ jobs:
         include:
           - os: ubuntu-latest
             target: linux-x86_64
+            triple: x86_64-unknown-linux-gnu
+            arch: x86-64
           - os: ubuntu-24.04-arm
             target: linux-arm64
+            triple: aarch64-unknown-linux-gnu
+            arch: aarch64
           - os: macos-15
             target: macos-arm64
-          - os: macos-15-intel
+            triple: aarch64-apple-darwin
+            arch: arm64
+          - os: macos-15
             target: macos-x86_64
+            triple: x86_64-apple-darwin
+            arch: x86_64
+            wheel_platform: macosx_11_0_x86_64
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.triple }}
       - uses: Swatinem/rust-cache@v2
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
-      - name: verify the runner matches the target architecture
-        run: |
-          host="$(rustc -vV | sed -n 's/^host: //p')"
-          case "${{ matrix.target }}" in
-            *-x86_64) want="x86_64" ;;
-            *-arm64) want="aarch64" ;;
-            *) echo "unknown target ${{ matrix.target }}" >&2; exit 1 ;;
-          esac
-          case "$host" in
-            "$want"-*) echo "host $host matches ${{ matrix.target }}" ;;
-            *) echo "::error::runner host $host cannot build ${{ matrix.target }}; a mislabelled artefact would ship to the wrong platform"; exit 1 ;;
-          esac
-
       - name: build the released binaries
         run: |
-          cargo build --release --locked -p wayfinder -p wayfinder-bench
+          cargo build --release --locked --target ${{ matrix.triple }} -p wayfinder -p wayfinder-bench
+          # The artefact, not the runner, decides the name: a cross build makes a
+          # host check meaningless, an architecture check does not.
+          file "target/${{ matrix.triple }}/release/wayfinder"
+          if ! file "target/${{ matrix.triple }}/release/wayfinder" | grep -qiE '${{ matrix.arch }}'; then
+            echo "::error::the built binary is not ${{ matrix.arch }}; refusing to publish a mislabelled artefact"
+            exit 1
+          fi
           mkdir -p dist
-          cp target/release/wayfinder dist/
-          cp target/release/wayfinder-bench dist/
+          cp "target/${{ matrix.triple }}/release/wayfinder" dist/
+          cp "target/${{ matrix.triple }}/release/wayfinder-bench" dist/
           tar -czf "wayfinder-${{ matrix.target }}.tar.gz" -C dist wayfinder wayfinder-bench
           if command -v sha256sum >/dev/null 2>&1; then
             sha256sum "wayfinder-${{ matrix.target }}.tar.gz" > "wayfinder-${{ matrix.target }}.tar.gz.sha256"
@@ -66,6 +72,8 @@ jobs:
           fi
 
       - name: wrap the binary in a platform wheel
+        env:
+          WAYFINDER_WHEEL_PLATFORM: ${{ matrix.wheel_platform }}
         run: |
           cp dist/wayfinder python/src/wayfinder_cli/bin/wayfinder
           # The package version tracks the tag, so `wayfinder --version` and
@@ -73,6 +81,7 @@ jobs:
           python -c "import os,pathlib,re;p=pathlib.Path('python/src/wayfinder_cli/__init__.py');v=os.environ['GITHUB_REF_NAME'].lstrip('v');p.write_text(re.sub(r'__version__ = \".*?\"','__version__ = \"'+v+'\"',p.read_text()))"
           python -m pip install --upgrade build
           python -m build --wheel --outdir dist-wheels python
+          ls -l dist-wheels
 
       - uses: actions/upload-artifact@v4
         with:

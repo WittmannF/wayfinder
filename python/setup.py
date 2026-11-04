@@ -7,6 +7,7 @@ leaving the tag's Python side as `py3`, because nothing here depends on a CPytho
 ABI.
 """
 
+import os
 import platform
 import sysconfig
 
@@ -15,11 +16,16 @@ from setuptools.command.bdist_wheel import bdist_wheel
 
 
 def platform_tag() -> str:
-    """Tag for the machine this wheel is built on.
+    """Tag for the platform this wheel's binary was built for.
 
-    setuptools asks for a universal2 macOS wheel by default; the binary inside is
-    the architecture the release was built for, so the tag must say which one.
+    A release cross-compiles the Intel macOS binary on an arm64 runner, so the
+    interpreter's own platform is not the answer; WAYFINDER_WHEEL_PLATFORM states
+    it explicitly. Without it, setuptools asks for a universal2 macOS wheel by
+    default, which would put one architecture's binary in a wheel claiming both.
     """
+    override = os.environ.get("WAYFINDER_WHEEL_PLATFORM", "").strip()
+    if override:
+        return override
     tag = sysconfig.get_platform().replace("-", "_").replace(".", "_")
     machine = platform.machine().replace("-", "_")
     if "universal2" in tag or tag.endswith("_universal"):
