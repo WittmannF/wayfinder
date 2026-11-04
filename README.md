@@ -56,8 +56,8 @@ Through a Python toolchain, if that is closer to hand — the package is an inst
 SDK; it carries the same released binary:
 
 ```bash
-uv tool install wayfinder-cli     # isolated app environment, on the PATH
-pip install wayfinder-cli        # into the current environment
+uv tool install wayfinder-memory   # isolated app environment, on the PATH
+pip install wayfinder-memory      # into the current environment
 ```
 
 From source, if you have the Rust toolchain:

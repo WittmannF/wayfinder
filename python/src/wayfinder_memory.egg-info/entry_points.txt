@@ -1,0 +1,2 @@
+[console_scripts]
+wayfinder = wayfinder_cli._cli:main

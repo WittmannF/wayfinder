@@ -3,7 +3,7 @@ requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "wayfinder-cli"
+name = "wayfinder-memory"
 description = "Install the wayfinder binary: workspace memory that coding agents write to, as a self-generating knowledge graph"
 dynamic = ["version"]
 readme = "README.md"
