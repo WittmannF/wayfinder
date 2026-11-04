@@ -1147,6 +1147,15 @@ fn medians(record: &RunRecord) -> BTreeMap<String, ArmStats> {
     out
 }
 
+/// Percent change from a baseline, or "—" when the baseline is zero.
+fn change(baseline: u64, value: u64) -> String {
+    if baseline == 0 {
+        return "—".to_owned();
+    }
+    let delta = (value as f64 - baseline as f64) / baseline as f64 * 100.0;
+    format!("{delta:+.0}%")
+}
+
 /// Median of one list.
 fn median(values: &mut [u64]) -> u64 {
     if values.is_empty() {
@@ -1190,6 +1199,24 @@ fn render_report(record: &RunRecord) -> String {
             "| {arm} | {} | {} | {} | {} / {} |\n",
             stats.wall_ms, stats.tokens, stats.tool_calls, stats.passed, stats.sessions
         ));
+    }
+    // The headline the objective asks for: what each arm saved against no tool.
+    let stats = medians(record);
+    if let Some(baseline) = stats.get("none") {
+        out.push_str("\n## Against no tool\n\n");
+        out.push_str("| Arm | Wall | Tokens | Tool calls |\n|---|---|---|---|\n");
+        for (arm, arm_stats) in &stats {
+            if arm == "none" {
+                continue;
+            }
+            out.push_str(&format!(
+                "| {arm} | {} | {} | {} |\n",
+                change(baseline.wall_ms, arm_stats.wall_ms),
+                change(baseline.tokens, arm_stats.tokens),
+                change(baseline.tool_calls, arm_stats.tool_calls),
+            ));
+        }
+        out.push_str("\nNegative is cheaper than no tool. `charged`: a follow-up that failed ground truth still counts.\n");
     }
     out.push_str("\n## Per case\n\n");
     let titles: BTreeMap<String, String> = record
@@ -1326,6 +1353,30 @@ mod tests {
         assert!(verify("run the coverage gate", &expect).is_err());
         assert!(verify("test:coverage needs 22.19", &expect).is_ok());
         assert!(verify("test:coverage, but first pnpm install", &expect).is_err());
+    }
+
+    #[test]
+    fn a_change_is_reported_against_the_baseline() {
+        assert_eq!(change(100, 50), "-50%");
+        assert_eq!(change(100, 150), "+50%");
+        assert_eq!(change(100, 100), "+0%");
+        assert_eq!(change(0, 10), "—");
+    }
+
+    #[test]
+    fn the_report_states_an_incomplete_matrix_and_the_deltas() {
+        let mut record = record(vec![
+            session("none", 100, 1_000, true),
+            session("wayfinder", 50, 400, true),
+        ]);
+        // A second case with no sessions: the report must say it is incomplete.
+        record.cases.push("other".to_owned());
+        let report = render_report(&record);
+        assert!(report.contains("Incomplete run"), "{report}");
+        assert!(
+            report.contains("| wayfinder | -50% | -60% | +0% |"),
+            "{report}"
+        );
     }
 
     #[test]
