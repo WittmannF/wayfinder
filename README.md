@@ -52,7 +52,15 @@ Installs the released binary for Linux or macOS (arm64 or x86_64) into `~/.local
 verifying the release checksum. `WAYFINDER_VERSION=v0.1.0` pins a version,
 `WAYFINDER_INSTALL_DIR` picks another directory.
 
-From source, if you have the toolchain:
+Through a Python toolchain, if that is closer to hand — the package is an installer, not an
+SDK; it carries the same released binary:
+
+```bash
+uv tool install wayfinder-cli     # isolated app environment, on the PATH
+pip install wayfinder-cli        # into the current environment
+```
+
+From source, if you have the Rust toolchain:
 
 ```bash
 cargo install --git https://github.com/zaterka/wayfinder wayfinder
@@ -60,6 +68,15 @@ cargo install --git https://github.com/zaterka/wayfinder wayfinder
 
 One binary. No runtime, no daemon, no database server — the index is a SQLite file the store
 rebuilds from the pages.
+
+Keep it current with:
+
+```bash
+wayfinder --upgrade     # newest release for this platform, checksum verified
+```
+
+Wayfinder also tells you when a newer release exists — one line, at most one check a day,
+cached under `~/.cache/wayfinder/`, silenced by `WAYFINDER_NO_UPDATE_CHECK=1`.
 
 ## Quickstart
 

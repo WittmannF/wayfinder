@@ -4,3 +4,8 @@ benchmark/results/*/worktrees/
 benchmark/results/*/homes/
 benchmark/results/*/run.json
 benchmark/results/*/report.md
+python/src/wayfinder_cli/bin/*
+!python/src/wayfinder_cli/bin/.gitkeep
+python/build/
+python/dist/
+python/*.egg-info/

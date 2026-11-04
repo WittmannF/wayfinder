@@ -1,0 +1,13 @@
+LICENSE
+NOTICE
+README.md
+pyproject.toml
+setup.py
+src/wayfinder_cli/__init__.py
+src/wayfinder_cli/_cli.py
+src/wayfinder_cli.egg-info/PKG-INFO
+src/wayfinder_cli.egg-info/SOURCES.txt
+src/wayfinder_cli.egg-info/dependency_links.txt
+src/wayfinder_cli.egg-info/entry_points.txt
+src/wayfinder_cli.egg-info/top_level.txt
+src/wayfinder_cli/bin/wayfinder

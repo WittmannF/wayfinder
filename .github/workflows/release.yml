@@ -50,8 +50,44 @@ jobs:
             wayfinder-${{ matrix.target }}.tar.gz
             wayfinder-${{ matrix.target }}.tar.gz.sha256
 
+  wheels:
+    name: wheel (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: linux-x86_64
+          - os: ubuntu-24.04-arm
+            target: linux-arm64
+          - os: macos-14
+            target: macos-arm64
+          - os: macos-13
+            target: macos-x86_64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: build the binary and wrap it in a platform wheel
+        run: |
+          cargo build --release --locked -p wayfinder
+          cp target/release/wayfinder python/src/wayfinder_cli/bin/wayfinder
+          # The package version tracks the tag, so `wayfinder --version` and
+          # `pip show wayfinder-cli` agree.
+          python -c "import os,pathlib,re;p=pathlib.Path('python/src/wayfinder_cli/__init__.py');v=os.environ['GITHUB_REF_NAME'].lstrip('v');p.write_text(re.sub(r'__version__ = \".*?\"','__version__ = \"'+v+'\"',p.read_text()))"
+          python -m pip install --upgrade build
+          python -m build --wheel --outdir dist-wheels python
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheel-${{ matrix.target }}
+          path: dist-wheels/*.whl
+
   publish:
-    needs: build
+    needs: [build, wheels]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -65,3 +101,20 @@ jobs:
           gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
             --title "wayfinder $GITHUB_REF_NAME" --generate-notes \
             dist/*.tar.gz dist/*.sha256
+
+  pypi:
+    # Publishing needs a PyPI API token in the PYPI_TOKEN secret and the
+    # repository variable PYPI_PUBLISH=true; without them the release still
+    # publishes binaries and wheels, it just does not upload to PyPI.
+    if: vars.PYPI_PUBLISH == 'true'
+    needs: wheels
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: wheels
+          pattern: wheel-*
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_TOKEN }}
+          packages-dir: wheels

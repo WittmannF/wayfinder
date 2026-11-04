@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wayfinder-cli"
+description = "Install the wayfinder binary: workspace memory that coding agents write to, as a self-generating knowledge graph"
+dynamic = ["version"]
+readme = "README.md"
+requires-python = ">=3.9"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+authors = [{ name = "Pedro Zaterka" }]
+keywords = ["agents", "memory", "knowledge-graph", "llm-wiki", "mcp", "cli"]
+classifiers = [
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Programming Language :: Rust",
+  "Topic :: Software Development",
+]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/zaterka/wayfinder"
+Issues = "https://github.com/zaterka/wayfinder/issues"
+Changelog = "https://github.com/zaterka/wayfinder/releases"
+
+[project.scripts]
+wayfinder = "wayfinder_cli._cli:main"
+
+[tool.setuptools.dynamic]
+version = { attr = "wayfinder_cli.__version__" }
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+wayfinder_cli = ["bin/wayfinder"]

@@ -17,6 +17,9 @@ clap.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 time.workspace = true
+sha2.workspace = true
+flate2 = "1"
+tar = "0.4"
 ureq.workspace = true
 wayfinder-core = { path = "../wayfinder-core" }
 

@@ -25,8 +25,11 @@ struct Cli {
     /// Project root; defaults to the nearest ancestor holding .wayfinder or .git.
     #[arg(long, global = true, value_name = "DIR")]
     root: Option<PathBuf>,
+    /// Install the newest released binary, then exit.
+    #[arg(long)]
+    upgrade: bool,
     #[command(subcommand)]
-    command: Command,
+    command: Option<Command>,
 }
 
 #[derive(Subcommand)]
@@ -252,6 +255,7 @@ impl From<HarnessArg> for install::Harness {
 
 mod install;
 mod mcp;
+mod update;
 mod writer;
 
 fn main() -> ExitCode {
@@ -270,7 +274,20 @@ fn run(cli: Cli) -> Result<ExitCode> {
         .root
         .clone()
         .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
-    match cli.command {
+    if cli.upgrade {
+        let message = update::upgrade(&update::release_base(), &update::api_url())
+            .map_err(|error| anyhow::anyhow!("{error:#}"))?;
+        println!("{message}");
+        return Ok(ExitCode::SUCCESS);
+    }
+    let Some(command) = cli.command else {
+        return Err(anyhow::anyhow!(
+            "no command given; run `wayfinder --help`, or `wayfinder init` to start"
+        ));
+    };
+    // The MCP server owns its stdout and must not open a network call mid-session.
+    let serves_protocol = matches!(&command, Command::Mcp { .. });
+    let outcome = match command {
         Command::Init { seed } => {
             let store = Store::init(&root)?;
             let stats = store.reindex()?;
@@ -363,7 +380,11 @@ fn run(cli: Cli) -> Result<ExitCode> {
                 yes,
             },
         ),
+    };
+    if outcome.is_ok() && !serves_protocol {
+        update::maybe_notice();
     }
+    outcome
 }
 
 /// Open the pool, pointing a first-time user at `init`.
