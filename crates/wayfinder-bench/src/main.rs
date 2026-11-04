@@ -825,10 +825,20 @@ fn prepare_home(context: &RunContext<'_>, home: &Path, worktree: &Path, label: &
             // arm is its real integration: build the graph, then let the agent
             // query it through the shell it already has.
             if let Some(bin) = context.graphify_bin {
+                // graphify's AST pass is local; its docs pass needs one of its
+                // model backends. This environment has no key for them, so the
+                // arm builds the code graph from a staging copy of the sources
+                // and moves the result into the worktree.
+                let staging = std::env::temp_dir()
+                    .join("wayfinder-bench")
+                    .join("graphify")
+                    .join(label);
+                let _ = fs::remove_dir_all(&staging);
+                stage_sources(worktree, &staging)?;
                 let extract = Command::new(bin)
                     .args(["extract", "."])
                     .arg("--no-cluster")
-                    .current_dir(worktree)
+                    .current_dir(&staging)
                     .env("HOME", home)
                     .output();
                 match extract {
@@ -841,6 +851,14 @@ fn prepare_home(context: &RunContext<'_>, home: &Path, worktree: &Path, label: &
                             .unwrap_or_default()
                     ),
                     Err(error) => eprintln!("graphify extract could not run: {error}"),
+                }
+                // The graph was built in the staging copy; the agent queries it
+                // from the worktree.
+                let produced = staging.join("graphify-out");
+                if produced.is_dir() {
+                    let target = worktree.join("graphify-out");
+                    let _ = fs::remove_dir_all(&target);
+                    copy_tree(&produced, &target)?;
                 }
                 let block = "<!-- graphify:begin -->\n## Codebase graph (graphify)\n\nThis workspace has a graphify knowledge graph under `graphify-out/`. Ask it instead of reading files: `graphify query \"<question>\"` prints the connected nodes and edges for a question, `graphify explain \"<symbol>\"` explains one node, and `graphify path \"A\" \"B\"` finds how two things connect. Read `graphify-out/GRAPH_REPORT.md` for the summary.\n<!-- graphify:end -->\n".to_string();
                 let path = worktree.join("AGENTS.md");
@@ -863,6 +881,48 @@ fn prepare_home(context: &RunContext<'_>, home: &Path, worktree: &Path, label: &
         }
     }
     let _ = label;
+    Ok(())
+}
+
+/// Copy the source files of one tree into a staging directory.
+fn stage_sources(from: &Path, to: &Path) -> Result<()> {
+    const SOURCE_EXTENSIONS: &[&str] = &[
+        "ts", "tsx", "js", "jsx", "mjs", "cjs", "py", "go", "rs", "java", "c", "h", "cpp", "rb",
+        "cs", "kt", "swift", "php",
+    ];
+    for path in walkdir(from) {
+        let relative = path.strip_prefix(from).unwrap_or(&path);
+        if relative.components().any(|part| {
+            let name = part.as_os_str().to_string_lossy().to_string();
+            name == "node_modules" || name == "target" || name == ".git" || name == "graphify-out"
+        }) {
+            continue;
+        }
+        let Some(extension) = path.extension().and_then(|extension| extension.to_str()) else {
+            continue;
+        };
+        if !SOURCE_EXTENSIONS.contains(&extension) {
+            continue;
+        }
+        let target = to.join(relative);
+        if let Some(parent) = target.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::copy(&path, &target)?;
+    }
+    Ok(())
+}
+
+/// Copy one directory tree.
+fn copy_tree(from: &Path, to: &Path) -> Result<()> {
+    for path in walkdir(from) {
+        let relative = path.strip_prefix(from).unwrap_or(&path);
+        let target = to.join(relative);
+        if let Some(parent) = target.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::copy(&path, &target)?;
+    }
     Ok(())
 }
 
