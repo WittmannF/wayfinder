@@ -144,6 +144,16 @@ jobs:
         with:
           path: wheels
           pattern: wheel-*
+          # Without this every artifact lands in its own subdirectory
+          # (wheels/wheel-linux-arm64/…) and the publisher rejects the folder
+          # name as an unknown distribution. Flattened, the four wheels sit
+          # directly in wheels/, which is what packages-dir expects.
+          merge-multiple: true
+      - name: list what will be uploaded
+        run: ls -l wheels
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: wheels
+          # A re-run after a fixed job must not fail on files the first attempt
+          # already uploaded.
+          skip-existing: true
