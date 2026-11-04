@@ -61,6 +61,9 @@ struct Cli {
     /// Continue a run: skip the series its record already holds.
     #[arg(long)]
     resume: bool,
+    /// Re-render the report from an existing run record and stop.
+    #[arg(long)]
+    report_only: bool,
 }
 
 /// One tool surface under test.
@@ -277,6 +280,16 @@ fn main() -> Result<()> {
         std::env::current_dir()?.join(&cli.out)
     };
     fs::create_dir_all(&out)?;
+    if cli.report_only {
+        // Re-render without spending anything: the record already holds the run.
+        let text = fs::read_to_string(out.join("run.json"))
+            .with_context(|| format!("read {}/run.json", out.display()))?;
+        let record: RunRecord = serde_json::from_str(&text)?;
+        fs::write(out.join("report.md"), render_report(&record))?;
+        println!("{}", summary(&record));
+        println!("\nwrote {}", out.join("report.md").display());
+        return Ok(());
+    }
     let existing = if cli.resume {
         fs::read_to_string(out.join("run.json"))
             .ok()
@@ -1157,6 +1170,19 @@ fn render_report(record: &RunRecord) -> String {
         record.cases.join(", "),
         record.repeats
     ));
+    let planned = record.arms.len() * record.cases.len() * record.repeats;
+    let done: std::collections::BTreeSet<(String, String, usize)> = record
+        .sessions
+        .iter()
+        .map(|session| (session.arm.clone(), session.case.clone(), session.repeat))
+        .collect();
+    if done.len() < planned {
+        out.push_str(&format!(
+            "> **Incomplete run:** {} of {} series recorded. Figures below cover what has run so far.\n\n",
+            done.len(),
+            planned
+        ));
+    }
     out.push_str("## Follow-up medians\n\n");
     out.push_str("| Arm | Wall ms | Total tokens | Tool calls | Passed / sessions |\n|---|---|---|---|---|\n");
     for (arm, stats) in medians(record) {
