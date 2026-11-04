@@ -13,7 +13,10 @@ $ pip install wayfinder-memory      # into the current Python environment
 $ wayfinder --help
 ```
 
-Linux and macOS, arm64 or x86_64. On any other platform, build from source:
+Linux and macOS, arm64 or x86_64 — every wheel states the platform it serves
+(`macosx_11_0_*` for macOS, and the glibc floor of the release runner for Linux, so a
+distribution older than that uses one of the paths below instead). On any other
+platform, build from source:
 
 ```console
 $ cargo install --git https://github.com/zaterka/wayfinder wayfinder

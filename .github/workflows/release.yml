@@ -81,17 +81,40 @@ jobs:
           # The package version tracks the tag, so `wayfinder --version` and
           # `pip show wayfinder-memory` agree.
           python -c "import os,pathlib,re;p=pathlib.Path('python/src/wayfinder_cli/__init__.py');v=os.environ['GITHUB_REF_NAME'].lstrip('v');p.write_text(re.sub(r'__version__ = \".*?\"','__version__ = \"'+v+'\"',p.read_text()))"
+          # PyPI refuses a plain `linux_*` tag, and a macOS floor of the runner's
+          # own version locks out every older Mac. Each wheel states the platform
+          # it actually serves, and the Linux floor is the glibc this runner
+          # linked against rather than a guess.
+          glibc="$(ldd --version 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+$' || true)"
+          mkdir -p dist/wheels
           for dir in dist/*/; do
             name="$(basename "$dir")"
             [ -f "$dir/wayfinder" ] || continue
             cp "$dir/wayfinder" python/src/wayfinder_cli/bin/wayfinder
-            platform=""
-            [ "$name" = "macos-x86_64" ] && platform="macosx_11_0_x86_64"
-            echo "::group::wheel for $name"
-            WAYFINDER_WHEEL_PLATFORM="$platform" python -m build --wheel --outdir "dist/wheels/$name" python
+            case "$name" in
+              macos-arm64)  platform=macosx_11_0_arm64 ;;
+              macos-x86_64) platform=macosx_11_0_x86_64 ;;
+              linux-x86_64) platform="manylinux_${glibc//./_}_x86_64" ;;
+              linux-arm64)  platform="manylinux_${glibc//./_}_aarch64" ;;
+              *) echo "::error::no wheel platform for $name"; exit 1 ;;
+            esac
+            case "$platform" in
+              manylinux_2_*) : ;;
+              manylinux_*) echo "::error::could not read the runner glibc (got '$platform')"; exit 1 ;;
+            esac
+            echo "::group::wheel for $name ($platform)"
+            WAYFINDER_WHEEL_PLATFORM="$platform" python -m build --wheel --outdir dist/wheels python
             echo "::endgroup::"
           done
-          ls -l dist/wheels/*/
+          # A wheel that does not carry the tag we meant to give it fails here,
+          # not at PyPI with a 400 after the release has been published.
+          ls -l dist/wheels
+          for wheel in dist/wheels/*.whl; do
+            case "$(basename "$wheel")" in
+              *-py3-none-macosx_11_0_arm64.whl|*-py3-none-macosx_11_0_x86_64.whl|*-py3-none-manylinux_*) : ;;
+              *) echo "::error::unexpected wheel tag: $wheel"; exit 1 ;;
+            esac
+          done
 
       - name: upload the release assets
         uses: actions/upload-artifact@v7
@@ -104,8 +127,11 @@ jobs:
       - name: upload the wheels
         uses: actions/upload-artifact@v7
         with:
+          # Flat on purpose: a glob that reaches into subdirectories makes
+          # upload-artifact keep them, and the publisher then offers a directory
+          # to twine, which rejects it as an unknown distribution.
           name: wheel-${{ matrix.group }}
-          path: dist/wheels/**/*.whl
+          path: dist/wheels/*.whl
           if-no-files-found: error
 
   publish:
@@ -136,6 +162,9 @@ jobs:
     # publishes the binaries and wheels, it just skips the upload.
     if: vars.PYPI_PUBLISH == 'true'
     needs: build
+    # If the PyPI pending publisher names an environment, declare the same one here
+    # (`environment: pypi`); a mismatch is an OIDC claim failure, not an upload
+    # failure. Leaving it unnamed on both sides is the simplest correct choice.
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -149,8 +178,19 @@ jobs:
           # name as an unknown distribution. Flattened, the four wheels sit
           # directly in wheels/, which is what packages-dir expects.
           merge-multiple: true
-      - name: list what will be uploaded
-        run: ls -l wheels
+      - name: assert a flat directory of wheels
+        run: |
+          set -euo pipefail
+          nested="$(find wheels -mindepth 1 -type d -print -quit)"
+          if [ -n "$nested" ]; then
+            echo "::error::artifacts unpacked a directory ($nested); the publisher would read it as a distribution"
+            find wheels -type f | head -20
+            exit 1
+          fi
+          count="$(find wheels -maxdepth 1 -name '*.whl' | wc -l | tr -d ' ')"
+          echo "wheels found: $count"
+          ls -l wheels
+          [ "$count" -ge 1 ] || { echo "::error::no wheels to publish"; exit 1; }
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: wheels
