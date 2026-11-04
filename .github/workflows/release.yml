@@ -7,8 +7,15 @@ on:
 permissions:
   contents: write
 
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
   build:
+    # One job per platform does everything that platform can do: the tarball, its
+    # checksum, and the platform wheel. Splitting wheels into their own matrix
+    # doubled the number of macOS runners a release asked for, and macOS runners
+    # are the scarce ones.
     name: build (${{ matrix.target }})
     strategy:
       fail-fast: false
@@ -16,21 +23,22 @@ jobs:
         include:
           - os: ubuntu-latest
             target: linux-x86_64
-            triple: x86_64-unknown-linux-gnu
           - os: ubuntu-24.04-arm
             target: linux-arm64
-            triple: aarch64-unknown-linux-gnu
           - os: macos-15
             target: macos-arm64
-            triple: aarch64-apple-darwin
           - os: macos-15-intel
             target: macos-x86_64
-            triple: x86_64-apple-darwin
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
       - name: verify the runner matches the target architecture
         run: |
           host="$(rustc -vV | sed -n 's/^host: //p')"
@@ -43,6 +51,7 @@ jobs:
             "$want"-*) echo "host $host matches ${{ matrix.target }}" ;;
             *) echo "::error::runner host $host cannot build ${{ matrix.target }}; a mislabelled artefact would ship to the wrong platform"; exit 1 ;;
           esac
+
       - name: build the released binaries
         run: |
           cargo build --release --locked -p wayfinder -p wayfinder-bench
@@ -55,68 +64,35 @@ jobs:
           else
             shasum -a 256 "wayfinder-${{ matrix.target }}.tar.gz" > "wayfinder-${{ matrix.target }}.tar.gz.sha256"
           fi
-      - uses: actions/upload-artifact@v4
-        with:
-          name: wayfinder-${{ matrix.target }}
-          path: |
-            wayfinder-${{ matrix.target }}.tar.gz
-            wayfinder-${{ matrix.target }}.tar.gz.sha256
 
-  wheels:
-    name: wheel (${{ matrix.target }})
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            target: linux-x86_64
-          - os: ubuntu-24.04-arm
-            target: linux-arm64
-          - os: macos-15
-            target: macos-arm64
-          - os: macos-15-intel
-            target: macos-x86_64
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: verify the runner matches the target architecture
+      - name: wrap the binary in a platform wheel
         run: |
-          host="$(rustc -vV | sed -n 's/^host: //p')"
-          case "${{ matrix.target }}" in
-            *-x86_64) want="x86_64" ;;
-            *-arm64) want="aarch64" ;;
-            *) echo "unknown target ${{ matrix.target }}" >&2; exit 1 ;;
-          esac
-          case "$host" in
-            "$want"-*) echo "host $host matches ${{ matrix.target }}" ;;
-            *) echo "::error::runner host $host cannot build ${{ matrix.target }}; a mislabelled artefact would ship to the wrong platform"; exit 1 ;;
-          esac
-      - name: build the binary and wrap it in a platform wheel
-        run: |
-          cargo build --release --locked -p wayfinder
-          cp target/release/wayfinder python/src/wayfinder_cli/bin/wayfinder
+          cp dist/wayfinder python/src/wayfinder_cli/bin/wayfinder
           # The package version tracks the tag, so `wayfinder --version` and
           # `pip show wayfinder-memory` agree.
           python -c "import os,pathlib,re;p=pathlib.Path('python/src/wayfinder_cli/__init__.py');v=os.environ['GITHUB_REF_NAME'].lstrip('v');p.write_text(re.sub(r'__version__ = \".*?\"','__version__ = \"'+v+'\"',p.read_text()))"
           python -m pip install --upgrade build
           python -m build --wheel --outdir dist-wheels python
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: assets-${{ matrix.target }}
+          path: |
+            wayfinder-${{ matrix.target }}.tar.gz
+            wayfinder-${{ matrix.target }}.tar.gz.sha256
       - uses: actions/upload-artifact@v4
         with:
           name: wheel-${{ matrix.target }}
           path: dist-wheels/*.whl
 
   publish:
-    needs: [build, wheels]
+    needs: build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
         with:
           path: dist
+          pattern: assets-*
           merge-multiple: true
       - name: publish the release assets
         env:
@@ -136,7 +112,7 @@ jobs:
     # set the repository variable PYPI_PUBLISH=true; without it a release still
     # publishes the binaries and wheels, it just skips the upload.
     if: vars.PYPI_PUBLISH == 'true'
-    needs: wheels
+    needs: build
     runs-on: ubuntu-latest
     permissions:
       id-token: write
