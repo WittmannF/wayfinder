@@ -2,3 +2,5 @@
 .wayfinder/
 benchmark/results/*/worktrees/
 benchmark/results/*/homes/
+benchmark/results/*/run.json
+benchmark/results/*/report.md
