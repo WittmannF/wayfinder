@@ -266,7 +266,14 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
-    fs::create_dir_all(&cli.out)?;
+    // Every path the runner hands to git and to a child process must be
+    // absolute: a relative one would resolve against the wrong directory.
+    let out = if cli.out.is_absolute() {
+        cli.out.clone()
+    } else {
+        std::env::current_dir()?.join(&cli.out)
+    };
+    fs::create_dir_all(&out)?;
     let mut record = RunRecord {
         arms: arms.iter().map(|arm| arm.as_str().to_owned()).collect(),
         cases: selected.iter().map(|case| case.id.clone()).collect(),
@@ -303,7 +310,7 @@ fn main() -> Result<()> {
                     provider: &cli.provider,
                     model: &cli.model,
                     preset: &cli.preset,
-                    out: &cli.out,
+                    out: &out,
                     timeout_seconds: cli.timeout,
                     wayfinder_bin: &wayfinder_bin,
                     graphify_bin: graphify_bin.as_deref(),
@@ -324,10 +331,10 @@ fn main() -> Result<()> {
         }
     }
 
-    let record_path = cli.out.join("run.json");
+    let record_path = out.join("run.json");
     fs::write(&record_path, serde_json::to_string_pretty(&record)?)?;
     let report = render_report(&record);
-    fs::write(cli.out.join("report.md"), &report)?;
+    fs::write(out.join("report.md"), &report)?;
     println!("\n{}", summary(&record));
     println!(
         "\nwrote {} and {}",

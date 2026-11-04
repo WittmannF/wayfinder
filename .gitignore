@@ -1,2 +1,4 @@
 /target
 .wayfinder/
+benchmark/results/*/worktrees/
+benchmark/results/*/homes/
