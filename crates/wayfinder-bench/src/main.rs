@@ -326,6 +326,9 @@ fn main() -> Result<()> {
                     );
                 }
                 record.sessions.extend(sessions);
+                // Persist after every series: a multi-hour run that dies at the
+                // last case must not lose the earlier ones.
+                fs::write(out.join("run.json"), serde_json::to_string_pretty(&record)?)?;
             }
         }
     }
@@ -1139,4 +1142,95 @@ fn render_report(record: &RunRecord) -> String {
         ));
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// One follow-up record with the given figures.
+    fn session(arm: &str, wall: u64, tokens: u64, passed: bool) -> SessionRecord {
+        SessionRecord {
+            arm: arm.to_owned(),
+            case: "case".to_owned(),
+            case_title: "Case".to_owned(),
+            follow_up: "one".to_owned(),
+            repeat: 1,
+            stage: "follow-up".to_owned(),
+            exit_code: 0,
+            answer: String::new(),
+            passed,
+            failure: None,
+            metrics: Metrics {
+                wall_ms: wall,
+                total_tokens: tokens,
+                tool_calls: 3,
+                ..Metrics::default()
+            },
+        }
+    }
+
+    fn record(sessions: Vec<SessionRecord>) -> RunRecord {
+        RunRecord {
+            arms: vec!["none".to_owned(), "wayfinder".to_owned()],
+            cases: vec!["case".to_owned()],
+            repeats: 1,
+            provider: "kornerstone".to_owned(),
+            model: "qwen38-27b-fp8".to_owned(),
+            preset: "standard".to_owned(),
+            commit: "abc".to_owned(),
+            sessions,
+        }
+    }
+
+    #[test]
+    fn medians_ignore_discovery_and_count_failures_in_the_total() {
+        let record = record(vec![
+            SessionRecord {
+                stage: "discovery".to_owned(),
+                ..session("wayfinder", 9_999, 999_999, true)
+            },
+            session("none", 100, 1_000, true),
+            session("none", 300, 3_000, false),
+            session("wayfinder", 200, 2_000, true),
+        ]);
+        let stats = medians(&record);
+        assert_eq!(
+            stats["none"].wall_ms, 300,
+            "median of 100 and 300 keeps the upper middle"
+        );
+        assert_eq!(stats["none"].tokens, 3_000);
+        assert_eq!(
+            stats["none"].passed, 1,
+            "a failed attempt still counts as a session"
+        );
+        assert_eq!(stats["none"].sessions, 2);
+        assert_eq!(
+            stats["wayfinder"].tokens, 2_000,
+            "discovery is not a follow-up"
+        );
+    }
+
+    #[test]
+    fn ground_truth_requires_every_term_and_rejects_forbidden_ones() {
+        let expect = Expectation {
+            all: vec!["test:coverage".to_owned()],
+            any: vec!["22.19".to_owned(), ">=24".to_owned()],
+            none: vec!["pnpm install".to_owned()],
+        };
+        assert!(verify("Run TEST:COVERAGE on Node >=24", &expect).is_ok());
+        assert!(verify("run the coverage gate", &expect).is_err());
+        assert!(verify("test:coverage needs 22.19", &expect).is_ok());
+        assert!(verify("test:coverage, but first pnpm install", &expect).is_err());
+    }
+
+    #[test]
+    fn a_yaml_block_is_sliced_verbatim() {
+        let document = "agent-default-model:\n  provider: a\nllm-pi-ai:\n  providers:\n    x:\n      api: openai\nagent-presets:\n  default: standard\n";
+        let block = slice_block(document, "llm-pi-ai").expect("block");
+        assert_eq!(
+            block,
+            "llm-pi-ai:\n  providers:\n    x:\n      api: openai\n"
+        );
+    }
 }
