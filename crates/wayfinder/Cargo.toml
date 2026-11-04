@@ -1,6 +1,6 @@
 [package]
 name = "wayfinder"
-description = "Terminal-first workspace memory for coding agents"
+description = "A hybrid of a self-generating knowledge graph and the LLM Wiki, for coding agents"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

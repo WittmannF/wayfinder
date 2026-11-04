@@ -1,0 +1,67 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: build (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: linux-x86_64
+            triple: x86_64-unknown-linux-gnu
+          - os: ubuntu-24.04-arm
+            target: linux-arm64
+            triple: aarch64-unknown-linux-gnu
+          - os: macos-14
+            target: macos-arm64
+            triple: aarch64-apple-darwin
+          - os: macos-13
+            target: macos-x86_64
+            triple: x86_64-apple-darwin
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: build the released binaries
+        run: |
+          cargo build --release --locked -p wayfinder -p wayfinder-bench
+          mkdir -p dist
+          cp target/release/wayfinder dist/
+          cp target/release/wayfinder-bench dist/
+          tar -czf "wayfinder-${{ matrix.target }}.tar.gz" -C dist wayfinder wayfinder-bench
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "wayfinder-${{ matrix.target }}.tar.gz" > "wayfinder-${{ matrix.target }}.tar.gz.sha256"
+          else
+            shasum -a 256 "wayfinder-${{ matrix.target }}.tar.gz" > "wayfinder-${{ matrix.target }}.tar.gz.sha256"
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wayfinder-${{ matrix.target }}
+          path: |
+            wayfinder-${{ matrix.target }}.tar.gz
+            wayfinder-${{ matrix.target }}.tar.gz.sha256
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: publish the release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+            --title "wayfinder $GITHUB_REF_NAME" --generate-notes \
+            dist/*.tar.gz dist/*.sha256
