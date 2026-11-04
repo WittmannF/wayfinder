@@ -97,6 +97,34 @@ Commit `.wayfinder/memory/` with the repository: the pages are the durable part 
 reviewer can read them in a diff. The index (`.wayfinder/index.db`) is derived — add
 it to `.gitignore` if you prefer; deleting it costs one scan.
 
+## Measured
+
+Three cases of the harness benchmark (the ones covering package ownership, the
+command surface, and a cited file changing between sessions), four arms, one repeat,
+Qwen 3.8-27B over the kornerstone route. Follow-up totals per arm:
+
+| Case | none | llm-wiki | wayfinder | graphify |
+|---|---|---|---|---|
+| ownership | 182 779 | **93 604** | 115 530 | 203 953 |
+| commands | 113 008 | 151 280 | **94 535** | 172 781 |
+| stale-page | 83 809 | 260 285 | 89 735 | **81 769** |
+
+Follow-up medians against no tool: **wayfinder −30 % tokens and −13 % wall**,
+llm-wiki +23 % tokens and +6 % wall, graphify +5 % tokens and +13 % wall. Every
+follow-up in every arm passed the ground-truth check.
+
+The discovery investment is real and per-arm: wayfinder spent 328 k / 346 k / 167 k
+tokens across the three cases' discovery sessions, llm-wiki 414 k / 214 k / 208 k,
+graphify 151 k / 229 k / 179 k.
+
+Three things to keep in view: this is one repeat of three cases (the harness's own
+v2 result, from six cases with repeats, was −53 % wall and −31 % tokens for
+llm-wiki); the mixed result is the finding, not a bug — llm-wiki wins package
+ownership and loses the command surface and the drift case, wayfinder wins two of
+three; and the graphify arm runs its code-only graph, queried through the shell.
+
+Full tables: [benchmark/RESULTS.md](benchmark/RESULTS.md).
+
 ## Benchmark
 
 `wayfinder-bench` runs four tool surfaces through one agent loop and one model:
