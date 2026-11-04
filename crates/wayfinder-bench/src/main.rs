@@ -310,7 +310,6 @@ fn main() -> Result<()> {
                     provider: &cli.provider,
                     model: &cli.model,
                     preset: &cli.preset,
-                    out: &out,
                     timeout_seconds: cli.timeout,
                     wayfinder_bin: &wayfinder_bin,
                     graphify_bin: graphify_bin.as_deref(),
@@ -356,7 +355,6 @@ struct RunContext<'a> {
     provider: &'a str,
     model: &'a str,
     preset: &'a str,
-    out: &'a Path,
     timeout_seconds: u64,
     wayfinder_bin: &'a Path,
     graphify_bin: Option<&'a Path>,
@@ -370,8 +368,11 @@ fn run_series(context: &RunContext<'_>) -> Result<Vec<SessionRecord>> {
         context.case.id,
         context.repeat
     );
-    let worktree = context.out.join("worktrees").join(&label);
-    let home = context.out.join("homes").join(&label);
+    // Worktrees and homes are scratch: they belong outside both repositories, so
+    // neither git nor a `git add` mistake can pick them up.
+    let scratch = std::env::temp_dir().join("wayfinder-bench");
+    let worktree = scratch.join("worktrees").join(&label);
+    let home = scratch.join("homes").join(&label);
     let _ = fs::remove_dir_all(&home);
     prepare_worktree(context.repo, context.commit, &worktree)?;
     prepare_home(context, &home, &worktree, &label)?;
