@@ -46,6 +46,22 @@ $ ./target/release/wayfinder-bench --repo <checkout> --repeats 3 --out <results 
 Worktrees and harness homes live under the platform temp directory; `--out` holds
 `run.json` and `report.md`.
 
+## Reading the numbers
+
+`memory_calls` counts calls whose tool name carries `memory_` or the `mcp__` prefix.
+The graphify arm reaches its graph through the shell (`graphify query …`), so its
+memory-call column stays zero even when the model used the graph: for that arm, read
+the token and wall columns, not the call counts.
+
+`reused_without_read` means the session made a memory call and then answered without
+calling a workspace-reading tool afterwards. It measures the order of tool work, not
+whether the page was sufficient: a page that answered and a page that was never opened
+look the same from the log.
+
+A discovery session is charged to its arm in the discovery table and excluded from
+the follow-up medians. The `charged` view — one that keeps failed attempts in the
+median — is what stops an arm that answers less often from looking cheaper.
+
 ## Known limits
 
 - One repository and one model: the facts in the case matrix are the ones a checkout
