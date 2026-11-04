@@ -82,7 +82,7 @@ cached under `~/.cache/wayfinder/`, silenced by `WAYFINDER_NO_UPDATE_CHECK=1`.
 
 ```bash
 wayfinder init                    # create .wayfinder/ in this repository
-wayfinder seed --structure        # one page per package, from manifests and READMEs
+wayfinder seed --structure        # pages for each package and each code directory, from files
 wayfinder install claude          # MCP server + instructions for your harness
 wayfinder graph --format html --out graph.html --open
 ```
@@ -112,7 +112,7 @@ Memory page "rate-limits" cites files that changed. Re-read these before trustin
 
 | | |
 |---|---|
-| **A graph that writes itself** | Every saved page declares `subject`, `depends`, `anchors`, and `supersedes`; those become nodes and edges. `seed --structure` maps an existing repository without a model. |
+| **A graph that writes itself** | Every saved page declares `subject`, `depends`, `anchors`, and `supersedes`; those become nodes and edges. `seed --structure` maps an existing repository without a model: a page per package, plus a page per code directory once a package holds more than a handful of source files, with the entry files each page starts from cited as anchors. |
 | **A wiki built for reuse** | `read --section` returns one heading instead of a page; search ranks with FTS5, then walks one hop over declared relations, so a page that never names the query can still answer it. |
 | **A trust check** | Every cited file is fingerprinted at save. `check` reports `fresh` / `changed` / `missing` per anchor, so a session knows whether to trust a page or re-read the file. |
 | **Concurrent agents, no corruption** | Atomic writes, a locked index, and content-hash revisions: two agents on one page serialize instead of clobbering, and the loser is told to re-read. See [Concurrent agents](#concurrent-agents). |
@@ -214,7 +214,7 @@ process the harness starts and stops.
 | `wayfinder list` · `check` | The pool, newest first · verify every cited file. |
 | `wayfinder digest` | The block a harness injects so a session knows the pool exists. |
 | `wayfinder graph --format …` | `html` (interactive), `svg`, `json`, `dot`, `mermaid`; `--watch`, `--open`. |
-| `wayfinder seed --structure` · `--pages` | Free pages from files · model-written pages, plan first. |
+| `wayfinder seed --structure` · `--pages` | Free pages from files — per package and per code directory · model-written pages, plan first. |
 | `wayfinder install <harness>` · `mcp` | Wire a harness · serve the pool over MCP. |
 | `wayfinder status` · `reindex` | What the pool holds · rebuild the derived index. |
 

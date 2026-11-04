@@ -121,7 +121,9 @@ fn the_structure_pass_writes_one_pointer_page_per_package() {
     assert_eq!(page.front.kind, Some(wayfinder_core::Kind::Pointer));
     assert_eq!(page.front.subjects, ["package:alpha", "path:crates/alpha"]);
     assert_eq!(page.front.depends, ["serde", "tokio"]);
-    assert_eq!(page.front.anchors.len(), 2);
+    // The manifest, the README, and the one entry file the crate holds.
+    assert_eq!(page.front.anchors.len(), 3);
+    assert_eq!(page.front.anchors[2].path, "crates/alpha/src/lib.rs");
     assert!(page.front.anchors.iter().all(|anchor| anchor.sha.is_some()));
     assert!(page.front.tags.iter().any(|tag| tag == "run:structure-1"));
     assert!(
@@ -155,7 +157,7 @@ fn a_second_structure_run_refreshes_and_leaves_written_pages_alone() {
         .expect("upgrade");
 
     let plan = plan_structure(&store, None).expect("plan");
-    assert_eq!(plan.upgraded, ["alpha"]);
+    assert_eq!(plan.upgraded, ["package-alpha"]);
 
     let report = seed_structure(&store, None, "structure-2").expect("second");
     assert_eq!(report.updated, 3);
@@ -174,7 +176,7 @@ fn the_priced_plan_states_what_a_run_would_spend() {
     seed_structure(&store, None, "structure-1").expect("seed");
 
     let without_model = plan_pages(&store, None, 60_000, None);
-    assert_eq!(without_model.packages, 4);
+    assert_eq!(without_model.pages, 4);
     assert_eq!(without_model.estimated_tokens, 240_000);
     assert!(without_model.unavailable.is_some());
     assert!(
@@ -185,7 +187,7 @@ fn the_priced_plan_states_what_a_run_would_spend() {
     );
 
     let with_model = plan_pages(&store, Some(2), 1_500, Some("qwen3.8-27b".to_owned()));
-    assert_eq!(with_model.packages, 2);
+    assert_eq!(with_model.pages, 2);
     assert_eq!(with_model.estimated_tokens, 3_000);
     assert_eq!(with_model.model.as_deref(), Some("qwen3.8-27b"));
     assert!(with_model.unavailable.is_none());
@@ -199,7 +201,7 @@ struct StubWriter {
 
 impl PageWriter for StubWriter {
     fn write(&self, request: &PageRequest) -> wayfinder_core::Result<PageAnswer> {
-        if self.fail_on.as_deref() == Some(request.package.name.as_str()) {
+        if self.fail_on.as_deref() == Some(request.target.package.name.as_str()) {
             return Err(wayfinder_core::Error::Invalid(
                 "the endpoint refused".to_owned(),
             ));
@@ -207,6 +209,20 @@ impl PageWriter for StubWriter {
         Ok(PageAnswer {
             body: self.body.clone(),
             tokens: 1_200,
+        })
+    }
+}
+
+/// A writer that saves the prompt itself, so a test can read what one page was
+/// asked to cover.
+struct PromptWriter;
+
+impl PageWriter for PromptWriter {
+    fn write(&self, request: &PageRequest) -> wayfinder_core::Result<PageAnswer> {
+        assert!(!request.files.is_empty(), "every page names files to read");
+        Ok(PageAnswer {
+            body: request.prompt.clone(),
+            tokens: 5,
         })
     }
 }
@@ -337,4 +353,195 @@ fn a_path_subject_keeps_its_separators() {
     let ids: Vec<&str> = graph.nodes.iter().map(|node| node.id.as_str()).collect();
     assert!(ids.contains(&"subject:path:crates/alpha"), "{ids:?}");
     let _ = Path::new(".");
+}
+
+/// Write `count` source files into one directory below the root.
+fn source_dir(root: &Path, relative_directory: &str, count: usize, extension: &str) {
+    fs::create_dir_all(root.join(relative_directory)).expect("directory");
+    for index in 0..count {
+        fs::write(
+            root.join(relative_directory)
+                .join(format!("file{index}.{extension}")),
+            format!("export const value{index} = {index}\n"),
+        )
+        .expect("source file");
+    }
+}
+
+/// One package whose code does not fit on a single page: 25 source files over
+/// three directories, plus one entry file.
+fn big_workspace() -> (tempfile::TempDir, Store) {
+    let directory = tempfile::tempdir().expect("temp dir");
+    let root = directory.path();
+    fs::write(root.join("package.json"), r#"{"name":"big"}"#).expect("manifest");
+    source_dir(root, "src/api", 10, "ts");
+    source_dir(root, "src/db", 8, "ts");
+    source_dir(root, "tests/unit", 6, "ts");
+    fs::write(root.join("src/index.ts"), "export {}\n").expect("entry");
+    let store = Store::init(root).expect("init");
+    (directory, store)
+}
+
+#[test]
+fn a_package_with_more_code_than_fits_on_one_page_splits_by_directory() {
+    let (_directory, store) = big_workspace();
+    let targets = wayfinder_core::structure_targets(store.root(), None);
+    let ids: Vec<&str> = targets.iter().map(|target| target.id.as_str()).collect();
+    assert_eq!(
+        ids,
+        ["package-big", "big-src-api", "big-src-db", "big-tests-unit"],
+        "{ids:?}"
+    );
+
+    let report = seed_structure(&store, None, "structure-1").expect("seed");
+    assert_eq!(report.written, 4);
+    assert_eq!(report.pages.len(), 4);
+
+    let package_page = store.read("package-big").expect("package page");
+    assert_eq!(package_page.front.kind, Some(wayfinder_core::Kind::Pointer));
+    assert!(
+        package_page.body.contains("## Code map"),
+        "{}",
+        package_page.body
+    );
+    assert!(
+        package_page
+            .body
+            .contains("25 source files in 3 directories"),
+        "{}",
+        package_page.body
+    );
+    assert!(
+        package_page.body.contains("## Entry points"),
+        "{}",
+        package_page.body
+    );
+
+    let area = store.read("big-src-api").expect("area page");
+    assert_eq!(area.front.kind, Some(wayfinder_core::Kind::Pointer));
+    assert_eq!(area.front.subjects, ["package:big", "path:src/api"]);
+    assert_eq!(area.front.depends, ["package:big"]);
+    assert_eq!(area.front.anchors.len(), 10);
+    assert!(area.body.contains("# big / src/api"), "{}", area.body);
+    assert!(area.body.contains("src/api/file0.ts"), "{}", area.body);
+    assert!(
+        area.front.tags.iter().any(|tag| tag == "run:structure-1"),
+        "{:?}",
+        area.front.tags
+    );
+    let checked = wayfinder_core::check_page(store.root(), &area).expect("check");
+    assert!(checked.all_fresh);
+
+    // The graph hangs each directory page off its package page.
+    let graph = wayfinder_core::build_graph(&store, wayfinder_core::GraphBounds::default(), None)
+        .expect("graph");
+    let ids: Vec<&str> = graph.nodes.iter().map(|node| node.id.as_str()).collect();
+    assert!(ids.contains(&"subject:path:src/api"), "{ids:?}");
+    assert!(ids.contains(&"subject:path:tests/unit"), "{ids:?}");
+    assert!(ids.contains(&"subject:package:big"), "{ids:?}");
+
+    // The priced pass upgrades the same four pages, each from its own files.
+    let plan = plan_pages(&store, None, 1_000, Some("a-model".to_owned()));
+    assert_eq!(plan.pages, 4);
+    assert_eq!(plan.estimated_tokens, 4_000);
+    let report = seed_pages(&store, &PromptWriter, None, "pages-1").expect("pages");
+    assert_eq!(report.saved, 4);
+    assert_eq!(report.tokens_spent, 20);
+    let area = store.read("big-src-db").expect("area page");
+    assert_eq!(area.front.kind, Some(wayfinder_core::Kind::Fact));
+    assert!(area.body.contains("directory `src/db`"), "{}", area.body);
+    assert!(area.body.contains("src/db/file0.ts"), "{}", area.body);
+}
+
+#[test]
+fn a_package_whose_code_fits_on_one_page_keeps_one_page() {
+    let (_directory, store) = workspace();
+    let packages = scan(store.root(), None);
+    assert!(packages.iter().all(|package| package.areas.is_empty()));
+    let targets = wayfinder_core::structure_targets(store.root(), None);
+    assert_eq!(targets.len(), packages.len());
+    let plan = plan_structure(&store, None).expect("plan");
+    assert!(plan.areas.is_empty());
+    assert_eq!(plan.pages, 4);
+    assert_eq!(plan.packages.len(), 4);
+}
+
+#[test]
+fn entry_points_come_from_the_manifest_and_the_directory() {
+    let directory = tempfile::tempdir().expect("temp dir");
+    let root = directory.path();
+    fs::create_dir_all(root.join("web/bin")).expect("bin");
+    fs::create_dir_all(root.join("web/src")).expect("src");
+    fs::create_dir_all(root.join("py/apkg")).expect("python");
+    fs::write(
+        root.join("web/package.json"),
+        r#"{"name":"web","main":"index.js","bin":{"web":"bin/cli.ts"}}"#,
+    )
+    .expect("node manifest");
+    fs::write(root.join("web/src/index.js"), "export {}\n").expect("declared source");
+    fs::write(root.join("web/src/index.ts"), "export {}\n").expect("conventional source");
+    fs::write(root.join("web/bin/cli.ts"), "#!/usr/bin/env node\n").expect("bin");
+    fs::write(
+        root.join("py/pyproject.toml"),
+        "[project]\nname = \"worker\"\n\n[project.scripts]\nserve = \"apkg.main:serve\"\n",
+    )
+    .expect("python manifest");
+    fs::write(root.join("py/apkg/main.py"), "def serve(): pass\n").expect("python entry");
+
+    let store = Store::init(root).expect("init");
+    let targets = wayfinder_core::structure_targets(store.root(), None);
+    let web = targets
+        .iter()
+        .find(|target| target.package.name == "web")
+        .expect("web");
+    // `main` names a built path, so its source under `src/` is what the page
+    // cites; the conventional `src/index.ts` beside it is an entry too.
+    assert_eq!(
+        web.package.entry_points,
+        ["web/src/index.js", "web/bin/cli.ts", "web/src/index.ts"]
+    );
+    let worker = targets
+        .iter()
+        .find(|target| target.package.name == "worker")
+        .expect("worker");
+    assert_eq!(worker.package.entry_points, ["py/apkg/main.py"]);
+
+    seed_structure(&store, None, "structure-1").expect("seed");
+    let page = store.read("package-web").expect("web page");
+    assert!(page.body.contains("## Entry points"), "{}", page.body);
+    assert!(page.body.contains("web/bin/cli.ts"), "{}", page.body);
+    assert!(
+        page.front
+            .anchors
+            .iter()
+            .any(|anchor| anchor.path == "web/bin/cli.ts"),
+        "{:?}",
+        page.front.anchors
+    );
+    assert!(
+        wayfinder_core::check_page(store.root(), &page)
+            .expect("check")
+            .all_fresh
+    );
+}
+
+#[test]
+fn directories_whose_slugs_collide_still_get_distinct_page_ids() {
+    let directory = tempfile::tempdir().expect("temp dir");
+    let root = directory.path();
+    let padding = "a".repeat(80);
+    fs::write(root.join("package.json"), r#"{"name":"collide"}"#).expect("manifest");
+    source_dir(root, &format!("dir{padding}"), 13, "rs");
+    source_dir(root, &format!("dir{padding}b"), 13, "rs");
+
+    let store = Store::init(root).expect("init");
+    let targets = wayfinder_core::structure_targets(store.root(), None);
+    let ids: Vec<&str> = targets.iter().map(|target| target.id.as_str()).collect();
+    assert_eq!(ids.len(), 3, "{ids:?}");
+    assert_eq!(ids[0], "package-collide");
+    // The second slug is cut at the page-id ceiling and suffixed instead.
+    assert!(ids[2].ends_with("-2"), "{ids:?}");
+    assert_ne!(ids[1], ids[2], "{ids:?}");
+    let report = seed_structure(&store, None, "structure-1").expect("seed");
+    assert_eq!(report.written, 3);
 }

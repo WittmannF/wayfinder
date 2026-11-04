@@ -22,7 +22,7 @@ wayfinder check [<id>]           # fresh / changed / missing per anchor
 wayfinder list --limit 20
 wayfinder digest --tokens 500    # the block a harness injects into the prompt
 wayfinder graph --format svg|json|dot|mermaid|html
-wayfinder seed --structure       # free pass: one page per package, from manifests
+wayfinder seed --structure       # free pass: one page per package and per code directory, from files
 wayfinder seed --pages --model qwen3.8-27b
 wayfinder install codex --global
 wayfinder mcp serve              # stdio MCP server: the same operations as tools

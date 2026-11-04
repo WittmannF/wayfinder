@@ -141,7 +141,8 @@ enum Command {
     },
     /// Write pages with a model, behind an explicit spend.
     Seed {
-        /// Write one page per package from its manifest and README: no model.
+        /// Write one page per package, and per code directory of a large
+        /// package, from files alone: no model.
         #[arg(long)]
         structure: bool,
         /// Upgrade those pages with a model-written one; states the cost first.
@@ -884,9 +885,20 @@ fn seed(store: &Store, options: SeedOptions) -> Result<ExitCode> {
         let plan =
             plan_structure(store, options.limit).map_err(|error| anyhow::anyhow!("{error}"))?;
         if options.plan {
-            println!("structure pass: {} package(s) found", plan.packages.len());
+            println!(
+                "structure pass: {} package(s) and {} code directory(ies), {} page(s) to write",
+                plan.packages.len(),
+                plan.areas.len(),
+                plan.pages
+            );
             for name in &plan.packages {
                 println!("  - {name}");
+            }
+            if !plan.areas.is_empty() {
+                println!("code directories (one page each):");
+                for area in &plan.areas {
+                    println!("  - {area}");
+                }
             }
             if !plan.upgraded.is_empty() {
                 println!(
@@ -918,11 +930,11 @@ fn seed(store: &Store, options: SeedOptions) -> Result<ExitCode> {
         endpoint.as_ref().map(|endpoint| endpoint.model.clone()),
     );
     println!("page pass plan:");
-    println!("  packages to upgrade   {}", plan.packages);
-    println!("  packages left alone   {}", plan.skipped);
+    println!("  pages to upgrade      {}", plan.pages);
+    println!("  pages left alone      {}", plan.skipped);
     println!(
-        "  estimated spend       {} tokens (~{} per package)",
-        plan.estimated_tokens, plan.token_estimate_per_package
+        "  estimated spend       {} tokens (~{} per page)",
+        plan.estimated_tokens, plan.token_estimate_per_page
     );
     println!(
         "  model                 {}",
