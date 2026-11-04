@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: wayfinder-memory
-Version: 0.1.0
+Version: 0.1.1
 Summary: Install the wayfinder binary: workspace memory that coding agents write to, as a self-generating knowledge graph
 Author: Pedro Zaterka
 License-Expression: Apache-2.0
@@ -12,7 +12,7 @@ Classifier: Environment :: Console
 Classifier: Intended Audience :: Developers
 Classifier: Programming Language :: Rust
 Classifier: Topic :: Software Development
-Requires-Python: >=3.9
+Requires-Python: >=3.11
 Description-Content-Type: text/markdown
 License-File: LICENSE
 License-File: NOTICE
