@@ -834,9 +834,7 @@ fn prepare_home(context: &RunContext<'_>, home: &Path, worktree: &Path, label: &
                     ),
                     Err(error) => eprintln!("graphify extract could not run: {error}"),
                 }
-                let block = format!(
-                    "<!-- graphify:begin -->\n## Codebase graph (graphify)\n\nThis workspace has a graphify knowledge graph under `graphify-out/`. Ask it instead of reading files: `graphify query \"<question>\"` prints the connected nodes and edges for a question, `graphify explain \"<symbol>\"` explains one node, and `graphify path \"A\" \"B\"` finds how two things connect. Read `graphify-out/GRAPH_REPORT.md` for the summary.\n<!-- graphify:end -->\n"
-                );
+                let block = "<!-- graphify:begin -->\n## Codebase graph (graphify)\n\nThis workspace has a graphify knowledge graph under `graphify-out/`. Ask it instead of reading files: `graphify query \"<question>\"` prints the connected nodes and edges for a question, `graphify explain \"<symbol>\"` explains one node, and `graphify path \"A\" \"B\"` finds how two things connect. Read `graphify-out/GRAPH_REPORT.md` for the summary.\n<!-- graphify:end -->\n".to_string();
                 let path = worktree.join("AGENTS.md");
                 let existing = fs::read_to_string(&path).unwrap_or_default();
                 fs::write(&path, format!("{existing}\n{block}"))?;
@@ -867,13 +865,12 @@ fn slice_block(document: &str, key: &str) -> Option<String> {
         .iter()
         .position(|line| line.starts_with(&format!("{key}:")))?;
     let mut end = lines.len();
-    for index in start + 1..lines.len() {
-        let line = lines[index];
+    for (offset, line) in lines.iter().skip(start + 1).enumerate() {
         let is_top_level = line.split(':').next().is_some_and(|head| {
             !head.is_empty() && !head.starts_with(' ') && !head.starts_with('-')
         });
         if is_top_level && line.contains(':') {
-            end = index;
+            end = start + 1 + offset;
             break;
         }
     }
