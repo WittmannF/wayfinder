@@ -5,4 +5,4 @@ This package ships no Python SDK. It exists so a Python toolchain can put the
 `pip install wayfinder-cli`, and it hands every argument to the release binary.
 """
 
-__version__ = "0.1.1"
+__version__ = "0.1.2"
