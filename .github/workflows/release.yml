@@ -157,3 +157,7 @@ jobs:
           # A re-run after a fixed job must not fail on files the first attempt
           # already uploaded.
           skip-existing: true
+          # The failure this job reports is an OIDC exchange with PyPI, and the
+          # short form says only "failure". Verbose prints the claims PyPI saw,
+          # which is what tells a missing pending publisher from a mismatched one.
+          verbose: true
