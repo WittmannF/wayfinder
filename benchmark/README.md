@@ -1,24 +1,42 @@
 # Benchmark: four tool surfaces, one agent loop, one model
 
-`wayfinder-bench` asks the same questions with and without a memory tool and reports
-what each surface cost in wall time and tokens. The case matrix is the one the
-Factored Harness benchmark published its v2 numbers with
-([`benchmarks/llm-wiki`](https://github.com/factoredai/Factored-Harness/tree/master/benchmarks/llm-wiki)),
-exported here as `cases.json` so the two runs stay comparable.
+`wayfinder-bench` asks the same questions with and without a memory tool and reports what
+each surface cost in wall time and tokens.
+
+The comparison exists to test one idea: the **LLM Wiki** — an agent that writes what it
+learns into a wiki it reads next session, instead of re-deriving it. Andrej Karpathy sketched
+the approach in [a gist](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f);
+this benchmark measures it against doing without, and against a code-graph tool that answers
+a different question.
+
+| Arm | What it is |
+|---|---|
+| `none` | No memory tool. The control. |
+| `llm-wiki` | The LLM Wiki idea implemented **in-process** by the agent harness under test: memory tools plus a prompt digest. |
+| `wayfinder` | The same idea as a standalone tool: this project over MCP, with its instruction block and a pool inside the worktree. |
+| `graphify` | A different idea — a code knowledge graph built ahead of time and queried through the shell. |
+
+The six cases are onboarding questions about the benchmarked checkout: who owns a subsystem,
+what the house conventions require, which command does what, how a format is versioned, what
+happens when a cited file changes, and how far a fact fans out. They live in
+[`cases.json`](cases.json).
 
 ## Arms
 
-| Arm | What the model can call |
-|---|---|
-| `none` | Nothing: the control. |
-| `llm-wiki` | The harness's own shared memory: `memory_*` tools plus the prompt digest. |
-| `wayfinder` | This project over MCP: `memory_*` tools, its instruction block, and a pool initialised in the worktree. |
-| `graphify` | graphify's knowledge graph: built by `graphify extract`, queried through the shell. |
+Every arm runs the same agent CLI, booted in its headless profile, against the same pinned
+commit, in its own detached worktree, with its own home directory. The profile patch selects
+plaintext session logs, so every figure is folded from what the agent loop wrote rather than
+from the process. The CLI under test comes from `--agent-dir` (or `WAYFINDER_AGENT_DIR`);
+the runner names no default.
 
-Every arm runs the Factored Harness headless profile against the same pinned commit,
-in its own detached worktree, with its own `DSH_HOME`. The profile patch selects
-plaintext session logs, so every figure is folded from what the harness wrote rather
-than from the process.
+### The adapter for the CLI under test
+
+The portable part is the arm definition: which tools the model can see and which profile the
+loop boots with. The runner also carries an adapter for the specific agent CLI it was written
+against — the plugin ids in the profile patch, the settings document path, and the source
+entry it launches. Point `--agent-dir` at that checkout and the adapter configures it; a
+different CLI needs its own adapter (a patch file and a launch command), not a different
+benchmark.
 
 ## Series
 
@@ -32,7 +50,8 @@ and a cold one receive the same words.
 - Wall time from the first to the last logged event.
 - Tool calls, memory calls split by kind, and whether a session answered without
   reopening the workspace after its first memory call.
-- Ground truth: the harness benchmark's substring check, so a confident wrong answer
+- Ground truth: a substring check over the final answer, so a confident wrong answer that
+  happens to name the right identifiers passes, and a correct paraphrase in other words
   fails.
 
 ## Running it

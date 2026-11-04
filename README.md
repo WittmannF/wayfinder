@@ -11,6 +11,11 @@ markdown pages under `.wayfinder/memory/` — facts, decisions, gotchas, and poi
 citing the files it rests on — and gives any harness the verbs to write, find, read, verify,
 and draw them.
 
+It is the **LLM Wiki** idea — an agent writes what it learns into a wiki it reads next
+session, [as Andrej Karpathy describes it](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)
+— built as a tool rather than a harness feature, so the pool outlives the session, the model,
+and the harness that produced it.
+
 ![The Wayfinder viewer: a 47-page pool drawn as a knowledge graph, with one page selected](docs/viewer.png)
 
 ## Measured
@@ -21,10 +26,12 @@ Three cases of a published agent benchmark, four tool surfaces, one agent loop, 
 | Surface | Wall time | Tokens |
 |---|---|---|
 | **wayfinder** | **−13 %** | **−30 %** |
-| harness LLM Wiki (in-process memory) | +6 % | +23 % |
+| LLM Wiki, implemented in-process by the harness under test | +6 % | +23 % |
 | graphify (code graph, queried through the shell) | +13 % | +5 % |
 
-Every follow-up in every arm passed the same ground-truth check. The mixed per-case result is
+The `llm-wiki` arm is that same idea implemented in-process by the harness under test; the
+measurement is therefore a fair test of the idea, not of one implementation. Every follow-up
+in every arm passed the same ground-truth check. The mixed per-case result is
 the interesting part: the in-process wiki wins package-ownership questions, wayfinder wins the
 command surface and the drift case. Method, full tables, and what the numbers cannot claim:
 [`benchmark/RESULTS.md`](benchmark/RESULTS.md).
@@ -153,8 +160,8 @@ existing `CLAUDE.md` keeps its prose, and the wayfinder block lives between mark
 second install updates it in place. A differing entry is reported and left alone unless
 `--force` is passed.
 
-Wayfinder reads the page format the Factored Harness writes — including its `sources:` list —
-so an existing pool works as-is.
+Wayfinder reads the page format an in-process LLM Wiki harness writes — including its
+`sources:` provenance list — so an existing pool from such a harness works as-is.
 
 ## Benchmark
 

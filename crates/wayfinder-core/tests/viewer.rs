@@ -190,8 +190,8 @@ fn the_static_renderings_stay_available() {
 
 #[test]
 fn a_harness_pool_page_reads_and_round_trips() {
-    // The shape the Factored Harness writes: `sources:` as a block list, block
-    // `tags`/`subject`, and anchors with a fingerprint.
+    // The shape an in-process LLM Wiki harness writes: `sources:` as a block
+    // list, block `tags`/`subject`, and anchors with a fingerprint.
     let text = "---\n\
 title: 'Bedrock credentials: origin and diagnostic'\n\
 tags:\n  - bedrock\n  - credentials\n\

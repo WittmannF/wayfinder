@@ -6,8 +6,8 @@ search that expands over declared relations, a drift check, a prompt digest, two
 seeding passes, and a knowledge graph — all reachable from the terminal and from
 MCP.
 
-The measured reason this exists: in the Factored Harness benchmark, giving an agent
-a wiki it can reuse cut follow-up sessions from **126.2 s to 59.1 s (−53 %)** and
+The measured reason this exists: in a published LLM Wiki benchmark, giving an agent a
+wiki it can reuse cut follow-up sessions from **126.2 s to 59.1 s (−53 %)** and
 **92 087 to 63 312 tokens (−31 %)**, and took answers that never reused the pool to
 six of eight. Wayfinder is that feature set without the harness.
 
@@ -72,7 +72,7 @@ share one pool instead of forking it.
    pyproject, Go; bounded walk; anchors on the files it read; one `depends` edge per
    dependency), and the priced page pass through an OpenAI-compatible endpoint,
    plan-first with an explicit estimate and a `--yes` gate.
-5. **Benchmark** — 4 arms (no tool, Factored Harness LLM Wiki, graphify, wayfinder) ×
+5. **Benchmark** — 4 arms (no tool, in-process LLM Wiki, graphify, wayfinder) ×
    the 6 harness cases × 3 repeats against `kornerstone-dev/qwen38-27b-fp8`, in a
    fresh checkout, with the same ground-truth guard and the charged-per-answer view.
    Next.

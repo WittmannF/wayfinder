@@ -22,7 +22,7 @@ const TOOL_PAGE_LIMIT: usize = 12;
 /// `wayfinder_*` instead.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Prefix {
-    /// `memory_save`, matching the Factored Harness tool surface.
+    /// `memory_save`, the tool names an in-process LLM Wiki harness uses.
     Memory,
     /// `wayfinder_save`, for a harness that has its own memory tools.
     Wayfinder,

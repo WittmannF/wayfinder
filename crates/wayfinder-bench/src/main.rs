@@ -1,7 +1,7 @@
 //! The benchmark runner: four tool surfaces, one agent loop, one model.
 //!
-//! Every arm runs the Factored Harness headless profile against the same pinned
-//! checkout, so the only difference between arms is which memory tool the model
+//! Every arm runs the same agent CLI, booted in its headless profile, against the
+//! same pinned checkout, so the only difference between arms is which memory tool the model
 //! can see: none, the harness's own LLM Wiki, graphify over MCP, or wayfinder
 //! over MCP. Per-arm homes are isolated, session logs are plaintext, and the
 //! numbers come from those logs rather than from the process.
@@ -25,6 +25,9 @@ struct Cli {
     /// Repository the benchmark reads as its workspace.
     #[arg(long, default_value = "")]
     repo: String,
+    /// Checkout of the agent CLI under test; defaults to WAYFINDER_AGENT_DIR.
+    #[arg(long, default_value = "")]
+    agent_dir: String,
     /// Commit to pin every worktree at.
     #[arg(long, default_value = "")]
     commit: String,
@@ -219,8 +222,20 @@ fn main() -> Result<()> {
     } else {
         cli.repo.clone()
     };
-    let harness = std::env::var("WAYFINDER_HARNESS")
-        .unwrap_or_else(|_| "/Users/pedro.zaterka/factored-projects/Factored-Harness".to_owned());
+    // The agent CLI under test boots from its own checkout — a Node CLI started
+    // through that checkout's source entry — so the arms measure that loop rather
+    // than a packaged copy of it. The runner names no default: point it at the
+    // checkout you want measured.
+    let harness = if cli.agent_dir.trim().is_empty() {
+        std::env::var("WAYFINDER_AGENT_DIR").unwrap_or_default()
+    } else {
+        cli.agent_dir.clone()
+    };
+    if harness.trim().is_empty() {
+        bail!(
+            "point the runner at the agent CLI under test: pass --agent-dir <DIR> or set WAYFINDER_AGENT_DIR"
+        );
+    }
     let commit = if cli.commit.is_empty() {
         git(&repo, &["rev-parse", "HEAD"])?.trim().to_owned()
     } else {
@@ -258,7 +273,7 @@ fn main() -> Result<()> {
         cli.model
     );
     println!("  repository {repo} at {commit}");
-    println!("  harness    {harness}");
+    println!("  agent CLI  {harness}");
     if cli.plan {
         for arm in &arms {
             for case in &selected {
