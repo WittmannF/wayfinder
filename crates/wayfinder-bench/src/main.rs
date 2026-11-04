@@ -929,11 +929,20 @@ fn prepare_home(context: &RunContext<'_>, home: &Path, worktree: &Path, label: &
                     .join(label);
                 let _ = fs::remove_dir_all(&staging);
                 stage_sources(worktree, &staging)?;
+                // No backend key exists here, and graphify refuses to start
+                // without one even when the corpus is code-only and its local
+                // AST pass would suffice. Naming the ollama backend satisfies
+                // that check; the base URL points at a closed port so an
+                // accidental semantic call fails instead of hanging.
                 let extract = Command::new(bin)
                     .args(["extract", "."])
                     .arg("--no-cluster")
+                    .arg("--backend")
+                    .arg("ollama")
                     .current_dir(&staging)
                     .env("HOME", home)
+                    .env("OLLAMA_API_KEY", "offline")
+                    .env("OLLAMA_BASE_URL", "http://127.0.0.1:9/v1")
                     .output();
                 match extract {
                     Ok(output) if output.status.success() => {}
