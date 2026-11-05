@@ -39,8 +39,8 @@ Rules the code keeps, and pull requests should keep:
 
 Conventional-commit subjects (`feat:`, `fix:`, `docs:`, `chore:`) with a body that says what
 changed and why. Say which command or test proves the change. For anything that alters the
-page format, the CLI surface, or the MCP tools, update `README.md` and `PLAN.md` in the same
-commit — the documentation is part of the change, not a follow-up.
+page format, the CLI surface, or the MCP tools, update `README.md` and `docs/architecture.md`
+in the same commit — the documentation is part of the change, not a follow-up.
 
 ## Benchmark claims
 

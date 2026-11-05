@@ -5,80 +5,67 @@
     <img src="images/logo-light.svg" alt="wayfinder" width="360">
   </picture>
 </h1>
-  <sub>A hybrid of a self-generating knowledge graph and the LLM Wiki — written by your agents, read back by the next session.</sub>
+  <sub>A hybrid of a self-generating knowledge graph and the LLM Wiki — written by your agents over MCP, read back by the next session.</sub>
 </p>
 
 <p align="center">
-  <a href="#install">Install</a> &nbsp;·&nbsp;
   <a href="#quickstart">Quickstart</a> &nbsp;·&nbsp;
+  <a href="#install">Install</a> &nbsp;·&nbsp;
+  <a href="#measured">Benchmark</a> &nbsp;·&nbsp;
   <a href="#how-it-works">How it works</a> &nbsp;·&nbsp;
   <a href="#concurrent-agents">Concurrent agents</a> &nbsp;·&nbsp;
-  <a href="BENCHMARK.md">Benchmark</a> &nbsp;·&nbsp;
   <a href="CONTRIBUTING.md">Contributing</a>
 </p>
 
 <p align="center">
   <a href="https://github.com/zaterka/wayfinder/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/zaterka/wayfinder/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://pypi.org/project/wayfinder-memory/"><img alt="PyPI" src="https://img.shields.io/pypi/v/wayfinder-memory.svg?color=blue"></a>
   <a href="LICENSE"><img alt="License: Apache 2.0" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg"></a>
   <a href="Cargo.toml"><img alt="Rust 1.89+" src="https://img.shields.io/badge/rust-1.89%2B-orange.svg"></a>
 </p>
 
 ![The Wayfinder viewer: a 47-page pool drawn as a knowledge graph, with one page selected](docs/viewer.png)
 
-Agents re-derive what they already knew. Wayfinder fixes that at the source: every finding a
-session saves becomes a page with a title, a kind, tags, the subjects it is about, and a
-fingerprint of every file it cites — and those declarations *are* the graph.
+Agents burn tokens re-deriving the architecture and conventions they already explored. Wayfinder
+fixes that at the source: every finding a session saves becomes a structured Markdown page in
+your repository — fingerprinted against the files it cites, linked into a knowledge graph, and
+served to your agent over MCP.
 
-Wayfinder is that hybrid: a wiki with the structure of a graph.
+In follow-up sessions across our [agent benchmark](#measured), Wayfinder cut **token usage by 30 %**
+and **wall time by 13 %** compared to an agent with no memory tool — while a naive in-process
+wiki and a shell-queried code graph both *increased* time and token cost.
+
+- **Memory in git, not in a service.** Pages are plain Markdown under `.wayfinder/memory/`,
+  committed with the code. You review what an agent learned in a pull request, `git diff` shows
+  it, and the pool outlives the session, the model, and the harness that wrote it.
+- **No daemon, no graph database, no vector store.** One binary; the index is a SQLite file the
+  store rebuilds from the pages whenever it is deleted.
+- **One command to wire a harness.**
+  `wayfinder install claude` — or `cursor`, `codex`, `copilot`, `gemini` — writes the MCP entry
+  and the instruction block that tells the agent when to search, read, and save.
+
+### Why a hybrid: LLM Wiki × Knowledge Graph
+
+Pure wikis drift silently when code changes and bloat prompts when injected wholesale; pure AST
+code graphs capture file structure, not the findings an agent had to work to discover. Wayfinder
+combines both:
 
 - **The LLM Wiki** — an agent writes what it learned into a wiki it reads next session
   ([Karpathy's gist](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)), with
-  section reads, search over declared relations, and a check that says when a cited file moved.
+  targeted section reads (`--section`), search over declared relations, and SHA-fingerprinted
+  anchors that warn when a cited file changed.
 - **A self-generating knowledge graph** — pages, subjects, packages, and cited paths are nodes;
-  `about` / `cites` / `depends` / `supersedes` are edges. Nothing to model by hand, no database
-  to run: `seed --structure` maps a repository in seconds, and every page an agent saves
+  `about` / `cites` / `depends` / `supersedes` are edges. Nothing to model by hand:
+  `seed --structure` maps an existing repository in seconds, and every page an agent saves
   afterwards makes the graph richer.
 
 `wayfinder graph --format html --out graph.html --watch` draws it — and keeps drawing it while
 agents work.
 
-## Install
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/zaterka/wayfinder/main/scripts/install.sh | bash
-```
-
-Installs the released binary for Linux or macOS (arm64 or x86_64) into `~/.local/bin` after
-verifying the release checksum. `WAYFINDER_VERSION=v0.1.0` pins a version,
-`WAYFINDER_INSTALL_DIR` picks another directory.
-
-Through a Python toolchain, if that is closer to hand — the package is an installer, not an
-SDK; it carries the same released binary:
-
-```bash
-uv tool install wayfinder-memory   # isolated app environment, on the PATH
-pip install wayfinder-memory      # into the current environment
-```
-
-From source, if you have the Rust toolchain:
-
-```bash
-cargo install --git https://github.com/zaterka/wayfinder wayfinder
-```
-
-One binary. No runtime, no daemon, no database server — the index is a SQLite file the store
-rebuilds from the pages.
-
-Keep it current with:
-
-```bash
-wayfinder --upgrade     # newest release for this platform, checksum verified
-```
-
-Wayfinder also tells you when a newer release exists — one line, at most one check a day,
-cached under `~/.cache/wayfinder/`, silenced by `WAYFINDER_NO_UPDATE_CHECK=1`.
-
 ## Quickstart
+
+Map an existing repository, wire your agent harness, and open the interactive knowledge graph in
+four commands:
 
 ```bash
 wayfinder init                    # create .wayfinder/ in this repository
@@ -90,6 +77,23 @@ wayfinder graph --format html --out graph.html --open
 Then start a new session. Your agent can call `memory_search`, `memory_read`, `memory_save`,
 `memory_list`, `memory_check`, `memory_digest`, and `memory_graph`, and it has been told when
 to use them.
+
+### In your agent session
+
+No prompt engineering, no special syntax — the installed instructions do the routing:
+
+```console
+> how are rate limits enforced here?
+  · memory_search("rate limits")                    → 1 hit: rate-limits (fact, fresh)
+  · memory_read("rate-limits", section="Throughput")
+  The limiter allows 100 requests per second per key, verified against src/limiter.rs.
+
+> (after debugging) save that the limiter reads its window from Redis, not memory
+  · memory_save(title="Rate limit window", kind="fact", subject=…, anchor="src/limiter.rs")
+  Saved rate-limit-window. Next session starts here instead of re-reading the tree.
+```
+
+The same operations from a terminal, when you want them without a session:
 
 ```console
 $ wayfinder search "how many requests per second"
@@ -108,39 +112,34 @@ Memory page "rate-limits" cites files that changed. Re-read these before trustin
   changed src/limiter.rs (now 3a1a16bbdd29312f)
 ```
 
-## What it gives you
+## Install
 
-| | |
-|---|---|
-| **A graph that writes itself** | Every saved page declares `subject`, `depends`, `anchors`, and `supersedes`; those become nodes and edges. `seed --structure` maps an existing repository without a model: a page per package, plus a page per code directory once a package holds more than a handful of source files, with the entry files each page starts from cited as anchors. |
-| **A wiki built for reuse** | `read --section` returns one heading instead of a page; search ranks with FTS5, then walks one hop over declared relations, so a page that never names the query can still answer it. |
-| **A trust check** | Every cited file is fingerprinted at save. `check` reports `fresh` / `changed` / `missing` per anchor, so a session knows whether to trust a page or re-read the file. |
-| **Concurrent agents, no corruption** | Atomic writes, a locked index, and content-hash revisions: two agents on one page serialize instead of clobbering, and the loser is told to re-read. See [Concurrent agents](#concurrent-agents). |
-| **A dashboard you can click** | `graph --format html` writes one offline file — node details, kind and subject filters, a text filter, a drift banner, cluster counts — and `--watch` keeps it current. |
-| **Harness-agnostic** | A terminal-first CLI, an MCP server over stdio, and one-command installs for Claude Code, Codex, Copilot, Cursor, and Gemini CLI. |
-| **A pool on day one** | `seed --pages` upgrades the free pointer pages with model-written ones, behind a stated cost and a `--yes` gate. |
+**One binary. No runtime, no daemon, no database.** Prebuilt for macOS 11+ and Linux (`arm64` and `x86_64`).
 
-## Concurrent agents
+```bash
+# With uv (recommended) or pip
+uv tool install wayfinder-memory
+pip install wayfinder-memory
 
-Several agents in one repository is the normal case now: parallel subagents, a swarm, a
-reviewer writing while an implementer reads. Wayfinder is built for it rather than around it.
+# Or via the standalone shell installer (verifies SHA-256, installs to ~/.local/bin)
+curl -fsSL https://raw.githubusercontent.com/zaterka/wayfinder/main/scripts/install.sh | bash
+```
 
-- **Atomic page writes.** Every save goes to a temporary file and is renamed into place, so a
-  reader never sees a half-written page.
-- **A locked index.** The derived index updates under an exclusive cross-process lock, so two
-  writers never interleave their rows.
-- **Revisions as fences.** `rev` is a hash of the page's bytes. A save carrying
-  `--expected-rev` is refused when the page moved, and the refusal names the revision that is
-  there now — the writer re-reads and retries instead of silently overwriting a colleague.
-- **Different pages never contend.** The lock covers the index update, not the investigation,
-  so agents writing different pages proceed in parallel.
+Keep an existing installation current with:
 
-Both properties are tested, not asserted: eight writers saving at once all land and are
-indexed, and two writers racing one page leave exactly one winner
-(`crates/wayfinder-core/tests/core.rs`). Point `wayfinder graph --watch` at the pool to watch a
-swarm fill it in.
+```bash
+wayfinder --upgrade     # newest release for this platform, checksum verified
+```
+
+> Building from source (`cargo`), pinning versions, Linux `glibc` requirements, Windows/Alpine
+> support, and troubleshooting are covered in
+> [**Installation & Troubleshooting**](docs/troubleshooting.md).
 
 ## Measured
+
+**Why it saves:** the agent answers from a page that already states the finding, and only trusts
+it while the files it cites still match — instead of re-exploring the tree and re-reading code it
+already understood.
 
 Three cases of an agent benchmark, four surfaces, one agent loop, one model (Qwen 3.8-27B,
 self-hosted). Follow-up cost against an agent with **no memory tool**:
@@ -152,7 +151,19 @@ self-hosted). Follow-up cost against an agent with **no memory tool**:
 | graphify (code graph, queried through the shell) | +13 % | +5 % |
 
 Every follow-up in every arm passed the same ground-truth check. Method, per-case split, and
-reproduction steps: [**BENCHMARK.md**](BENCHMARK.md).
+reproduction steps: [**docs/benchmark.md**](docs/benchmark.md).
+
+## What it gives you
+
+| Capability | How Wayfinder does it |
+|---|---|
+| **A graph that writes itself** | Every saved page declares `subject`, `depends`, `anchors`, and `supersedes`; those become nodes and edges. `seed --structure` maps an existing repository without a model: a page per package, plus a page per code directory once a package holds more than a handful of source files, with the entry files each page starts from cited as anchors. |
+| **A wiki built for reuse** | `read --section` returns one heading instead of a page; search ranks with FTS5, then walks one hop over declared relations, so a page that never names the query can still answer it. |
+| **A trust check** | Every cited file is fingerprinted at save. `check` reports `fresh` / `changed` / `missing` per anchor, so a session knows whether to trust a page or re-read the file. |
+| **Concurrent agents, no corruption** | Atomic writes, a locked index, and content-hash revisions: two agents on one page serialize instead of clobbering, and the loser is told to re-read. See [Concurrent agents](#concurrent-agents). |
+| **A dashboard you can click** | `graph --format html` writes one offline file — node details, kind and subject filters, a text filter, a drift banner, cluster counts — and `--watch` keeps it current. |
+| **Harness-agnostic** | A terminal-first CLI, an MCP server over stdio, and one-command installs for Claude Code, Codex, Copilot, Cursor, and Gemini CLI. |
+| **A pool on day one** | `seed --pages` upgrades the free pointer pages with model-written ones, behind a stated cost and a `--yes` gate. |
 
 ## How it works
 
@@ -187,6 +198,26 @@ pool outlives the session, the model, and the harness that wrote it. The root re
 `--root`, then `WAYFINDER_ROOT`, then the nearest ancestor holding `.wayfinder/` or `.git/`, so
 a worktree and its branches share one pool instead of forking it.
 
+## Concurrent agents
+
+Several agents in one repository is the normal case now: parallel subagents, a swarm, a
+reviewer writing while an implementer reads. Wayfinder is built for it rather than around it.
+
+- **Atomic page writes.** Every save goes to a temporary file and is renamed into place, so a
+  reader never sees a half-written page.
+- **A locked index.** The derived index updates under an exclusive cross-process lock, so two
+  writers never interleave their rows.
+- **Revisions as fences.** `rev` is a hash of the page's bytes. A save carrying
+  `--expected-rev` is refused when the page moved, and the refusal names the revision that is
+  there now — the writer re-reads and retries instead of silently overwriting a colleague.
+- **Different pages never contend.** The lock covers the index update, not the investigation,
+  so agents writing different pages proceed in parallel.
+
+Both properties are tested, not asserted: eight writers saving at once all land and are
+indexed, and two writers racing one page leave exactly one winner
+(`crates/wayfinder-core/tests/core.rs`). Point `wayfinder graph --watch` at the pool to watch a
+swarm fill it in.
+
 ## Harnesses
 
 | Harness | MCP entry | Instructions |
@@ -220,9 +251,10 @@ process the harness starts and stops.
 
 ## Documentation
 
-- [BENCHMARK.md](BENCHMARK.md) — what was measured, how, and what it does not prove.
-- [PLAN.md](PLAN.md) — the design decisions behind the store, revisions, and the graph.
-- [CONTRIBUTING.md](CONTRIBUTING.md) — the checks CI runs and the rules the code keeps.
+- [Architecture](docs/architecture.md) — crate layout, storage model, revisions, search expansion, and the graph.
+- [Benchmark](docs/benchmark.md) — what was measured, how, and what it does not prove.
+- [Installation & Troubleshooting](docs/troubleshooting.md) — platform support, Linux `glibc` requirements, installer environment variables, building from source, and common fixes.
+- [Contributing](CONTRIBUTING.md) — the checks CI runs and the rules the code keeps.
 
 ## License
 

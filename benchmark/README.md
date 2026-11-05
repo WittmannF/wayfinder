@@ -1,7 +1,7 @@
 # Benchmark runner
 
 > The published results — numbers, per-case split, and limits — live in
-> [`../BENCHMARK.md`](../BENCHMARK.md). This page documents the runner that produces them.
+> [`../docs/benchmark.md`](../docs/benchmark.md). This page documents the runner that produces them.
 > The crate is `publish = false`: it is a reproducibility tool, not part of the shipped CLI.
 
 `wayfinder-bench` asks the same questions with and without a memory tool and reports what

@@ -1,5 +1,6 @@
 /target
 .wayfinder/
+PLAN.md
 benchmark/results/*/worktrees/
 benchmark/results/*/homes/
 benchmark/results/*/run.json

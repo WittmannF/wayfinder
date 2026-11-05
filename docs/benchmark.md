@@ -94,5 +94,5 @@ the agent loop wrote — provider-reported input and output tokens — not from 
   load moves times between runs.
 
 The runner is `crates/wayfinder-bench`; the methodology, the counters, and the adapter
-boundary are documented in [`benchmark/README.md`](benchmark/README.md), and the raw tables
-from this run are in [`benchmark/RESULTS.md`](benchmark/RESULTS.md).
+boundary are documented in [`benchmark/README.md`](../benchmark/README.md), and the raw tables
+from this run are in [`benchmark/RESULTS.md`](../benchmark/RESULTS.md).
