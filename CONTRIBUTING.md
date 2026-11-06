@@ -57,6 +57,34 @@ from, how many repeats, and what the arm configuration was. [`benchmark/README.m
 lists what the comparison cannot claim; a claim outside those limits will be asked to justify
 itself.
 
+## Releasing
+
+Cut releases from `main` with `scripts/release.sh`, never by tagging a commit by hand.
+Preview the run first with `--dry-run`, which prints the bump, the checks, and the push
+commands without changing anything:
+
+```console
+$ scripts/release.sh X.Y.Z --dry-run
+$ scripts/release.sh X.Y.Z
+$ git push origin main
+$ git push origin vX.Y.Z
+```
+
+The helper bumps `Cargo.toml`, `Cargo.lock`, and the Python `__version__` together, commits
+`chore(release): X.Y.Z`, and creates the annotated tag `vX.Y.Z`. It refuses an existing tag
+and a tree that is not clean `main`. Tags are numeric (`vX.Y.Z`); the helper and the gate do
+not accept pre-release suffixes.
+
+The release workflow refuses to publish unless the tag, `Cargo.toml`, `Cargo.lock`, the
+Python `__version__`, and the built binary's `--version` all agree (the cross-compiled Intel
+Mac asset is not executed; the source checks cover it). A tag without a bump ships a binary
+whose `version` names the previous release (v0.1.5 and v0.1.6 both print `wayfinder 0.1.4`).
+
+Always push the tag: a release created from the GitHub UI or API does not emit the `push`
+event the workflow needs. Once the PyPI job uploads, that version is immutable, so a bad
+publish is recovered by deleting the tag and release and cutting the next patch, never by
+reusing the version.
+
 ## Licensing of contributions
 
 Wayfinder is licensed under the [Apache License 2.0](LICENSE). By opening a pull request you

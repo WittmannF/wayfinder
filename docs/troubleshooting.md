@@ -20,7 +20,10 @@ Prebuilt binaries are published for **macOS 11+** and **Linux**, on both `arm64`
 
 If you see a dynamic linker error mentioning `GLIBC_2.39`, you are either running v0.1.5 or
 earlier, or your distribution predates `glibc 2.28`. Upgrade to v0.1.6+ (`wayfinder --upgrade` or
-re-run the installer), or build from source on that machine.
+re-run the installer), or build from source on that machine. Note that v0.1.5 and v0.1.6
+both print `wayfinder 0.1.4`, because their version carriers were not bumped, so
+`--version` cannot distinguish those builds; re-run the installer and check
+`wayfinder --version` to confirm you are on v0.1.7 or later.
 
 ## Installation options
 
@@ -47,7 +50,7 @@ Environment variables recognized by `install.sh`:
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `WAYFINDER_VERSION` | latest release | Pin a specific release tag (e.g. `WAYFINDER_VERSION=v0.1.6`) |
+| `WAYFINDER_VERSION` | latest release | Pin a specific release tag (e.g. `WAYFINDER_VERSION=v0.1.7`) |
 | `WAYFINDER_INSTALL_DIR` | `~/.local/bin` | Target directory for the installed binary |
 | `WAYFINDER_BASE_URL` | GitHub Releases URL | Override the release host for mirrors or air-gapped tests |
 

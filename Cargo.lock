@@ -1060,7 +1060,7 @@ checksum = "ccf3ec651a847eb01de73ccad15eb7d99f80485de043efb2f370cd654f4ea44b"
 
 [[package]]
 name = "wayfinder"
-version = "0.1.4"
+version = "0.1.7"
 dependencies = [
  "anyhow",
  "clap",
@@ -1077,7 +1077,7 @@ dependencies = [
 
 [[package]]
 name = "wayfinder-bench"
-version = "0.1.4"
+version = "0.1.7"
 dependencies = [
  "anyhow",
  "clap",
@@ -1087,7 +1087,7 @@ dependencies = [
 
 [[package]]
 name = "wayfinder-core"
-version = "0.1.4"
+version = "0.1.7"
 dependencies = [
  "fs2",
  "rusqlite",

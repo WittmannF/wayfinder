@@ -11,11 +11,73 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  verify:
+    # v0.1.5 and v0.1.6 were tagged without a version bump, so their binaries
+    # reported `wayfinder 0.1.4`. A tag is a claim about the source tree, so
+    # check the claim in seconds before any runner spends an hour on it.
+    #
+    # The Cargo.lock leg is the load-bearing check: it pins the exact package
+    # cargo will compile into CARGO_PKG_VERSION. The Cargo.toml leg catches a
+    # manifest bump that was never locked. The Python leg is hygiene only —
+    # the wheel step in `build` rewrites __version__ from the tag before
+    # building wheels — but a drifted constant would trap the next release,
+    # so fail loudly here instead of letting it ride along.
+    name: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      # tomllib is 3.11+; pin the interpreter instead of trusting the runner image.
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+      - name: tag, Cargo.toml, Cargo.lock and Python __version__ agree
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          python3 - "$version" <<'PY'
+          import ast, sys, tomllib
+          from pathlib import Path
+
+          version = sys.argv[1]
+
+          manifest = tomllib.loads(Path('Cargo.toml').read_text())
+          found = manifest['workspace']['package']['version']
+          if found != version:
+            print(f'::error::Cargo.toml [workspace.package] version is {found!r}, tag says {version!r}; cut releases with scripts/release.sh')
+            sys.exit(1)
+
+          lock = tomllib.loads(Path('Cargo.lock').read_text())
+          locked = {package['name']: package['version'] for package in lock['package']}
+          for name in ('wayfinder', 'wayfinder-core', 'wayfinder-bench'):
+            found = locked.get(name)
+            if found != version:
+              print(f'::error::Cargo.lock {name} is {found!r}, tag says {version!r}; cut releases with scripts/release.sh')
+              sys.exit(1)
+
+          tree = ast.parse(Path('python/src/wayfinder_cli/__init__.py').read_text())
+          found = None
+          for node in tree.body:
+            if (
+              isinstance(node, ast.Assign)
+              and any(isinstance(t, ast.Name) and t.id == '__version__' for t in node.targets)
+              and isinstance(node.value, ast.Constant)
+              and isinstance(node.value.value, str)
+            ):
+              found = node.value.value
+          if found != version:
+            print(f'::error::python/src/wayfinder_cli/__init__.py __version__ is {found!r}, tag says {version!r}; cut releases with scripts/release.sh')
+            sys.exit(1)
+
+          print(f'tag {version}: Cargo.toml, Cargo.lock and python __version__ all agree')
+          PY
+
   build:
     # One Linux runner per architecture, and exactly one Apple runner that
     # produces both Mac artefacts (native arm64 plus a cross-compiled x86_64).
     # macOS images queue unpredictably — a job can wait fifteen minutes for a
     # runner that never comes — so the release asks for one, not two.
+    needs: verify
     name: build (${{ matrix.group }})
     strategy:
       fail-fast: false
@@ -54,6 +116,7 @@ jobs:
       - name: build every target this runner serves
         run: |
           set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
           mkdir -p dist
           container='${{ matrix.container }}'
           for triple in ${{ matrix.triples }}; do
@@ -91,6 +154,22 @@ jobs:
             mkdir -p "dist/$name"
             cp "$binary" "dist/$name/wayfinder"
             cp "target/$triple/release/wayfinder-bench" "dist/$name/wayfinder-bench"
+            # Defense in depth against the tag/source drift `verify` blocks:
+            # execute the exact file the tarball will contain and require it
+            # to report the tag. Skip-listed, not architecture-compared, so an
+            # unexpected triple fails instead of silently skipping; only the
+            # cross-compiled Intel Mac binary cannot run on this arm64 runner
+            # (both Linux builds and macOS arm64 are native).
+            case "$triple" in
+              x86_64-apple-darwin) echo "cross build: skipped executed-version check for $triple" ;;
+              *)
+                reported="$("dist/$name/wayfinder" --version)"
+                if [ "$reported" != "wayfinder $version" ]; then
+                  echo "::error::$name reported '$reported', expected 'wayfinder $version'"
+                  exit 1
+                fi
+                ;;
+            esac
             tar -czf "dist/wayfinder-$name.tar.gz" -C "dist/$name" wayfinder wayfinder-bench
             if command -v sha256sum >/dev/null 2>&1; then
               ( cd dist && sha256sum "wayfinder-$name.tar.gz" > "wayfinder-$name.tar.gz.sha256" )
