@@ -4,9 +4,10 @@ use std::fs;
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;
 use std::path::Path;
-use std::process::Command;
+use std::process::{Command, Output};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Mutex, MutexGuard};
 
 /// A gzip tarball holding one `wayfinder` binary.
 fn tarball(payload: &[u8]) -> Vec<u8> {
@@ -105,8 +106,24 @@ fn stop_server(handle: std::thread::JoinHandle<()>, stop: Arc<AtomicBool>) {
     let _ = handle.join();
 }
 
+/// Serializes staging (which opens an executable for writing) against spawning
+/// (which forks). A fork that happens while a writable descriptor to a staged
+/// binary is open hands that descriptor to the child, and Linux then refuses to
+/// exec the staged file with ETXTBSY (rust-lang/rust#114554). The lock is
+/// process-wide, so it covers every spawn in this test binary.
+static STAGING: Mutex<()> = Mutex::new(());
+
+/// Take the staging lock, recovering from a previous test's panic instead of
+/// turning one failure into a poisoned-lock failure for every later spawn.
+fn staging() -> MutexGuard<'static, ()> {
+    STAGING
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
 /// Copy the CLI somewhere writable, so an upgrade replaces the copy.
 fn staged_binary(directory: &Path) -> std::path::PathBuf {
+    let _staged = staging();
     let source = Path::new(env!("CARGO_BIN_EXE_wayfinder"));
     let target = directory.join("wayfinder");
     fs::copy(source, &target).expect("stage the binary");
@@ -116,6 +133,21 @@ fn staged_binary(directory: &Path) -> std::path::PathBuf {
         fs::set_permissions(&target, fs::Permissions::from_mode(0o755)).expect("chmod");
     }
     target
+}
+
+/// Spawn and capture a command while holding the staging lock.
+///
+/// The lock covers `output()` (spawn + wait), which is stricter than needed but
+/// keeps `output()`'s stdin/stdout/stderr semantics and these tests are fast.
+fn run(command: &mut Command) -> Output {
+    let _staging = staging();
+    command.output().unwrap_or_else(|error| {
+        panic!(
+            "run {:?} {:?}: {error}",
+            command.get_program(),
+            command.get_args()
+        )
+    })
 }
 
 #[test]
@@ -129,13 +161,11 @@ fn an_upgrade_downloads_verifies_and_replaces_the_binary() {
     let directory = tempfile::tempdir().expect("temp dir");
     let binary = staged_binary(directory.path());
 
-    let output = Command::new(&binary)
+    let output = run(Command::new(&binary)
         .arg("--upgrade")
         .env("WAYFINDER_RELEASE_BASE", format!("{base}/releases"))
         .env("WAYFINDER_RELEASE_API", format!("{base}/releases/latest"))
-        .env("WAYFINDER_CACHE_DIR", directory.path().join("cache"))
-        .output()
-        .expect("run --upgrade");
+        .env("WAYFINDER_CACHE_DIR", directory.path().join("cache")));
     stop_server(server, stop);
 
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -148,7 +178,7 @@ fn an_upgrade_downloads_verifies_and_replaces_the_binary() {
     );
     if stdout.contains("upgraded") {
         // The copy now runs the payload the server served.
-        let replaced = Command::new(&binary).output().expect("run the replacement");
+        let replaced = run(&mut Command::new(&binary));
         assert_eq!(
             String::from_utf8_lossy(&replaced.stdout).trim(),
             "fake-new-wayfinder"
@@ -165,13 +195,11 @@ fn a_checksum_mismatch_leaves_the_binary_untouched() {
     let binary = staged_binary(directory.path());
     let before = fs::read(&binary).expect("read staged binary");
 
-    let output = Command::new(&binary)
+    let output = run(Command::new(&binary)
         .arg("--upgrade")
         .env("WAYFINDER_RELEASE_BASE", format!("{base}/releases"))
         .env("WAYFINDER_RELEASE_API", format!("{base}/releases/latest"))
-        .env("WAYFINDER_CACHE_DIR", directory.path().join("cache"))
-        .output()
-        .expect("run --upgrade");
+        .env("WAYFINDER_CACHE_DIR", directory.path().join("cache")));
     stop_server(server, stop);
 
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -196,14 +224,12 @@ fn a_check_writes_a_cache_the_next_command_can_read() {
     let binary = staged_binary(directory.path());
 
     // `init` is a human command, and the first one of the day does the check.
-    let first = Command::new(&binary)
+    let first = run(Command::new(&binary)
         .arg("init")
         .current_dir(directory.path())
         .env_remove("CI")
         .env("WAYFINDER_RELEASE_API", format!("{base}/releases/latest"))
-        .env("WAYFINDER_CACHE_DIR", &cache)
-        .output()
-        .expect("run init");
+        .env("WAYFINDER_CACHE_DIR", &cache));
     assert!(
         first.status.success(),
         "{}",
@@ -218,13 +244,11 @@ fn a_check_writes_a_cache_the_next_command_can_read() {
     );
 
     // With a fresh cache naming a newer release, the next human command says so.
-    let again = Command::new(&binary)
+    let again = run(Command::new(&binary)
         .arg("status")
         .current_dir(directory.path())
         .env_remove("CI")
-        .env("WAYFINDER_CACHE_DIR", &cache)
-        .output()
-        .expect("run status");
+        .env("WAYFINDER_CACHE_DIR", &cache));
     assert!(
         String::from_utf8_lossy(&again.stderr).contains("wayfinder v9.9.9 is available"),
         "stderr={}",
@@ -244,14 +268,12 @@ fn the_check_can_be_turned_off() {
     .expect("seed a fresh cache naming a newer release");
     let binary = staged_binary(directory.path());
 
-    let quiet = Command::new(&binary)
+    let quiet = run(Command::new(&binary)
         .arg("init")
         .current_dir(directory.path())
         .env_remove("CI")
         .env("WAYFINDER_CACHE_DIR", &cache)
-        .env("WAYFINDER_NO_UPDATE_CHECK", "1")
-        .output()
-        .expect("run init");
+        .env("WAYFINDER_NO_UPDATE_CHECK", "1"));
     assert!(
         !String::from_utf8_lossy(&quiet.stderr).contains("is available"),
         "an opted-out command must stay quiet"
