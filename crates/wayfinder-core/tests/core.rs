@@ -166,10 +166,11 @@ fn a_page_without_anchors_declares_nothing_to_verify() {
 fn search_finds_a_page_and_then_its_neighbours() {
     let (_directory, store) = pool();
     store
-        .save(&SaveRequest::new(
-            "Rate limits",
-            "The limiter allows 100 requests per second.",
-        ))
+        .save(&SaveRequest {
+            subjects: vec!["package:widget".to_owned()],
+            anchors: vec![Anchor::parse("src/limiter.rs")],
+            ..SaveRequest::new("Rate limits", "The limiter allows 100 requests per second.")
+        })
         .expect("save");
     store
         .save(&SaveRequest {
@@ -180,6 +181,30 @@ fn search_finds_a_page_and_then_its_neighbours() {
             )
         })
         .expect("save");
+    store
+        .save(&SaveRequest {
+            anchors: vec![Anchor::parse("src/limiter.rs")],
+            ..SaveRequest::new(
+                "Limiter implementation gotcha",
+                "Normalize the window before comparing request timestamps.",
+            )
+        })
+        .expect("save");
+    store
+        .save(&SaveRequest {
+            subjects: vec!["package:widget".to_owned()],
+            ..SaveRequest::new(
+                "Limiter API context",
+                "The public limiter interface is shared by server and worker callers.",
+            )
+        })
+        .expect("save");
+    store
+        .save(&SaveRequest::new(
+            "Billing retry notes",
+            "Retry transient settlement failures with backoff.",
+        ))
+        .expect("save");
 
     let direct = store
         .search("requests per second", &SearchFilters::default())
@@ -187,16 +212,130 @@ fn search_finds_a_page_and_then_its_neighbours() {
     assert_eq!(direct.pages[0].id, "rate-limits");
     assert!(direct.pages[0].snippet.contains("100 requests"));
 
-    // "LIMIT_PER_SEC" never mentions the query, so it only arrives through the
-    // declared dependency.
+    // These pages never mention the query. They arrive through a shared
+    // subject, cited path, or package dependency node.
     let expanded = store
         .search("rate limits", &SearchFilters::default())
         .expect("search");
-    assert!(expanded.pages.iter().any(|hit| hit.id == "rate-limits"));
+    assert_eq!(expanded.pages[0].id, "rate-limits");
+    let via: std::collections::BTreeMap<_, _> = expanded
+        .pages
+        .iter()
+        .map(|hit| (hit.id.as_str(), hit.via.as_deref()))
+        .collect();
+    assert_eq!(via.get("limiter-config"), Some(&Some("shared-depends")));
+    assert_eq!(
+        via.get("limiter-implementation-gotcha"),
+        Some(&Some("shared-cites"))
+    );
+    assert_eq!(via.get("limiter-api-context"), Some(&Some("shared-about")));
+    assert!(!via.contains_key("billing-retry-notes"));
     let narrowed = store
         .search("requests per second", &SearchFilters::default())
         .expect("search");
     assert!(narrowed.expanded <= narrowed.pages.len());
+}
+
+#[test]
+fn relation_expansion_preserves_kind_and_subject_filters() {
+    let (_directory, store) = pool();
+    store
+        .save(&SaveRequest {
+            kind: Some(Kind::Fact),
+            subjects: vec!["feature:export".to_owned()],
+            ..SaveRequest::new(
+                "Export retention",
+                "Merchant invoices are retained seven years.",
+            )
+        })
+        .expect("save direct page");
+    store
+        .save(&SaveRequest {
+            kind: Some(Kind::Gotcha),
+            subjects: vec!["feature:export".to_owned()],
+            ..SaveRequest::new(
+                "Export CSV gotcha",
+                "Quote embedded delimiters before output.",
+            )
+        })
+        .expect("save related gotcha");
+    store
+        .save(&SaveRequest {
+            kind: Some(Kind::Fact),
+            subjects: vec!["feature:export".to_owned()],
+            ..SaveRequest::new("Export API delivery", "The public rows are stable.")
+        })
+        .expect("save related fact");
+    store
+        .save(&SaveRequest {
+            kind: Some(Kind::Fact),
+            subjects: vec!["feature:billing".to_owned()],
+            ..SaveRequest::new(
+                "Billing retention",
+                "Merchant invoices are retained seven years.",
+            )
+        })
+        .expect("save other subject");
+
+    let hits = store
+        .search(
+            "export retention",
+            &SearchFilters {
+                kind: Some(Kind::Fact),
+                subject: Some("feature:export".to_owned()),
+                ..Default::default()
+            },
+        )
+        .expect("search with filters");
+    assert_eq!(
+        hits.pages
+            .iter()
+            .map(|hit| hit.id.as_str())
+            .collect::<Vec<_>>(),
+        ["export-retention", "export-api-delivery"]
+    );
+    assert_eq!(hits.pages[0].id, "export-retention");
+    assert_eq!(hits.pages[1].via.as_deref(), Some("shared-about"));
+}
+
+#[test]
+fn relation_expansion_prefers_specific_shared_nodes_over_broad_ones() {
+    let (_directory, store) = pool();
+    store
+        .save(&SaveRequest {
+            subjects: vec!["project:wayfinder".to_owned(), "topic:retention".to_owned()],
+            ..SaveRequest::new(
+                "Retention policy",
+                "Merchant invoices follow the seven year policy.",
+            )
+        })
+        .expect("save direct page");
+    store
+        .save(&SaveRequest {
+            subjects: vec!["project:wayfinder".to_owned(), "topic:retention".to_owned()],
+            ..SaveRequest::new(
+                "Retention implementation gotcha",
+                "Keep the export archive date separate from the upload date.",
+            )
+        })
+        .expect("save focused related page");
+    for number in 0..20 {
+        store
+            .save(&SaveRequest {
+                subjects: vec!["project:wayfinder".to_owned()],
+                ..SaveRequest::new(
+                    format!("General project note {number}"),
+                    "Shared project background without task-specific detail.",
+                )
+            })
+            .expect("save broad related page");
+    }
+
+    let hits = store
+        .search("retention policy", &SearchFilters::default())
+        .expect("search");
+    assert_eq!(hits.pages[0].id, "retention-policy");
+    assert_eq!(hits.pages[1].id, "retention-implementation-gotcha");
 }
 
 #[test]

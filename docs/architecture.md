@@ -8,7 +8,7 @@ graph, revision-safe concurrent writes, and an MCP server and CLI shipped in a s
 
 | Crate | Purpose |
 |---|---|
-| `crates/wayfinder-core` | Storage engine, Markdown/frontmatter parser, content-hash revisions, file anchor verification, SQLite FTS5 + edge index, 1-hop relation search, graph layout and emitters (HTML, SVG, JSON, DOT, Mermaid), and repository seeding. |
+| `crates/wayfinder-core` | Storage engine, Markdown/frontmatter parser, content-hash revisions, file anchor verification, SQLite FTS5 + edge index, page-level relation expansion, graph layout and emitters (HTML, SVG, JSON, DOT, Mermaid), and repository seeding. |
 | `crates/wayfinder` | Terminal CLI (`wayfinder`), stdio MCP server (`wayfinder mcp`), and idempotent harness installer (`wayfinder install <harness>`). |
 | `crates/wayfinder-bench` | Standalone four-arm benchmark runner (`publish = false`) used to evaluate follow-up wall time and token usage across memory surfaces. |
 
@@ -68,10 +68,14 @@ index:
 
 ## Search & section reads
 
-- **FTS5 + 1-hop graph expansion:** `wayfinder search` ranks pages using SQLite FTS5 over titles
-  and bodies, then walks one hop across declared graph edges (`about`, `cites`, `depends`,
-  `supersedes`) and combines scores via Reciprocal Rank Fusion (RRF). Pages connected to a
-  matching package or path surface even when they don't repeat the exact query terms.
+- **FTS5 + related-page expansion:** `wayfinder search` tokenizes the query and requires every
+  usable term to match in a page title or body. SQLite FTS5's Porter/Unicode tokenizer and
+  BM25 rank direct matches. Search then finds pages sharing a declared subject, cited path, or
+  dependency node, plus pages linked directly by `supersedes`. Shared nodes are discounted by
+  how many pages use them, so a narrow relation ranks above a broad one. Direct matches stay
+  ahead of expanded pages via Reciprocal Rank Fusion (RRF), and kind/subject filters also apply
+  to expanded pages. This is lexical retrieval with bounded graph assistance, not semantic or
+  embedding search.
 - **Section-scoped reads (`--section`):** Instead of pulling an entire document into the context
   window, agents can read a single Markdown heading (`wayfinder read <id> --section Throughput`).
 

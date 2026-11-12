@@ -1,5 +1,5 @@
-//! Search: full-text ranking, then one hop over declared relations so a page
-//! that never names the query still answers it.
+//! Search: full-text ranking, then page-level relations and shared graph nodes
+//! so a page that never names the query can still answer it.
 
 use crate::error::Result;
 use crate::index::SearchFilters;
@@ -71,7 +71,8 @@ pub struct ReadOutcome {
 }
 
 impl Store {
-    /// Search the pool, then widen one hop over declared relations.
+    /// Search the pool, then widen to pages connected directly or through one
+    /// shared subject, cited path, or dependency node.
     /// @param query - free text; empty lists the most recent pages
     /// @param filters - kind and subject narrowing
     pub fn search(&self, query: &str, filters: &SearchFilters) -> Result<SearchOutcome> {
@@ -79,7 +80,9 @@ impl Store {
         index.sync(self.paths())?;
         let direct = index.search(query, filters)?;
         let seeds: Vec<String> = direct.iter().map(|hit| hit.id.clone()).collect();
-        let neighbours = index.neighbours(&seeds)?;
+        let mut neighbours = index.neighbours(&seeds)?;
+        let related_limit = filters.limit.unwrap_or(8).saturating_mul(4).clamp(16, 64);
+        neighbours.extend(index.related_pages(&seeds, filters, related_limit)?);
 
         // Reciprocal rank fusion: a direct match keeps its rank, a neighbour
         // starts below every direct match and is damped by the predicate.
@@ -95,6 +98,8 @@ impl Store {
             neighbour_rank += 1;
             let weight = match predicate.as_str() {
                 "supersedes" | "depends" => 1.0,
+                "shared-depends" => 0.75,
+                "shared-cites" => 0.6,
                 _ => 0.5,
             };
             fused.insert(
@@ -124,6 +129,16 @@ impl Store {
                 Ok(page) => page,
                 Err(_) => continue,
             };
+            if filters
+                .kind
+                .is_some_and(|kind| page.front.kind != Some(kind))
+                || filters
+                    .subject
+                    .as_ref()
+                    .is_some_and(|subject| !page.front.subjects.contains(subject))
+            {
+                continue;
+            }
             pages.push(Hit {
                 snippet: snippet_of(&page.body, query),
                 rev: page.rev(),
