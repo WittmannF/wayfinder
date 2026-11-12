@@ -151,7 +151,7 @@ fn tool_list(prefix: Prefix) -> Vec<Value> {
     vec![
         json!({
             "name": name("search"),
-            "description": "Search this workspace's memory pages: findings, decisions, and gotchas earlier sessions wrote. Results are widened one hop over declared relations, so a page that never names the query can still answer it. Use it before reading files that may already be summarized.",
+            "description": "Search this workspace's memory pages: findings, decisions, and gotchas earlier sessions wrote. FTS results are expanded to pages sharing a subject, cited path, or dependency, so a related page can surface even when it does not repeat the query. Direct matches rank first. Use it before reading files that may already be summarized.",
             "inputSchema": {
                 "type": "object",
                 "properties": {

@@ -307,8 +307,8 @@ impl Index {
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
     }
 
-    /// Pages one edge away from any of `seeds`, with the predicate that reached
-    /// them, excluding the seeds themselves.
+    /// Page neighbours connected directly to any seed by a page-id relation.
+    /// Entity nodes such as subjects and paths are handled by `related_pages`.
     /// @param seeds - page ids the caller already matched
     pub fn neighbours(&self, seeds: &[String]) -> Result<Vec<(String, String)>> {
         let mut found: Vec<(String, String)> = Vec::new();
@@ -319,8 +319,15 @@ impl Index {
             .collect::<Vec<_>>()
             .join(", ");
         let sql = format!(
-            "SELECT dst, predicate FROM edges WHERE src IN ({placeholders})
-             UNION SELECT src, predicate FROM edges WHERE dst IN ({placeholders})"
+            "SELECT id, predicate FROM (
+                 SELECT pages.id AS id, edges.predicate AS predicate
+                   FROM edges JOIN pages ON pages.id = edges.dst
+                  WHERE edges.src IN ({placeholders})
+                 UNION
+                 SELECT pages.id AS id, edges.predicate AS predicate
+                   FROM edges JOIN pages ON pages.id = edges.src
+                  WHERE edges.dst IN ({placeholders})
+             ) ORDER BY CASE predicate WHEN 'supersedes' THEN 0 ELSE 1 END, id, predicate"
         );
         let mut statement = self.connection.prepare(&sql)?;
         let values: Vec<rusqlite::types::Value> = seeds
@@ -336,6 +343,85 @@ impl Index {
             found.push(row?);
         }
         Ok(found)
+    }
+
+    /// Pages that share an indexed subject, cited path, or dependency node
+    /// with any seed. Shared nodes are ranked by inverse page degree so a
+    /// narrow relation contributes more than a broad one.
+    /// @param seeds - page ids the caller already matched
+    /// @param filters - kind and subject restrictions to preserve on expansion
+    /// @param limit - maximum related pages to return
+    pub fn related_pages(
+        &self,
+        seeds: &[String],
+        filters: &SearchFilters,
+        limit: usize,
+    ) -> Result<Vec<(String, String)>> {
+        if seeds.is_empty() {
+            return Ok(Vec::new());
+        }
+        let placeholders = std::iter::repeat_n("?", seeds.len())
+            .collect::<Vec<_>>()
+            .join(", ");
+        let mut sql = format!(
+            "WITH seed_edges AS (
+                 SELECT DISTINCT dst, predicate FROM edges
+                  WHERE src IN ({placeholders})
+                    AND predicate IN ('about', 'cites', 'depends')
+             ), shared AS (
+                 SELECT peer.src AS id, seed_edges.dst AS node,
+                        MAX(CASE
+                            WHEN seed_edges.predicate = 'depends' OR peer.predicate = 'depends' THEN 3
+                            WHEN seed_edges.predicate = 'cites' OR peer.predicate = 'cites' THEN 2
+                            ELSE 1
+                        END) AS relation_rank
+                   FROM seed_edges
+                   JOIN edges AS peer ON peer.dst = seed_edges.dst
+                   JOIN pages AS candidate ON candidate.id = peer.src
+                  WHERE peer.src NOT IN ({placeholders})
+                    AND peer.predicate IN ('about', 'cites', 'depends')"
+        );
+        let mut values: Vec<rusqlite::types::Value> = seeds
+            .iter()
+            .cloned()
+            .map(rusqlite::types::Value::from)
+            .collect();
+        values.extend(seeds.iter().cloned().map(rusqlite::types::Value::from));
+        if let Some(kind) = filters.kind {
+            sql.push_str(" AND candidate.kind = ?");
+            values.push(kind.as_str().to_owned().into());
+        }
+        if let Some(subject) = &filters.subject {
+            sql.push_str(" AND candidate.id IN (SELECT page_id FROM subjects WHERE subject = ?)");
+            values.push(subject.clone().into());
+        }
+        sql.push_str(
+            " GROUP BY peer.src, seed_edges.dst
+             ), ranked AS (
+                 SELECT id,
+                        MAX(relation_rank) AS relation_rank,
+                        SUM(1.0 * relation_rank /
+                            (3.0 * (SELECT COUNT(DISTINCT e.src) FROM edges AS e WHERE e.dst = shared.node))) AS score
+                   FROM shared
+                  GROUP BY id
+             )
+             SELECT id,
+                    CASE relation_rank
+                        WHEN 3 THEN 'shared-depends'
+                        WHEN 2 THEN 'shared-cites'
+                        ELSE 'shared-about'
+                    END AS relation
+               FROM ranked
+              ORDER BY score DESC, id ASC
+              LIMIT ?",
+        );
+        values.push((limit.max(1) as i64).into());
+
+        let mut statement = self.connection.prepare(&sql)?;
+        let rows = statement.query_map(params_from_iter(values), |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })?;
+        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
     }
 
     /// Count of indexed pages.

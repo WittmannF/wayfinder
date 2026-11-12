@@ -158,7 +158,7 @@ reproduction steps: [**docs/benchmark.md**](docs/benchmark.md).
 | Capability | How Wayfinder does it |
 |---|---|
 | **A graph that writes itself** | Every saved page declares `subject`, `depends`, `anchors`, and `supersedes`; those become nodes and edges. `seed --structure` maps an existing repository without a model: a page per package, plus a page per code directory once a package holds more than a handful of source files, with the entry files each page starts from cited as anchors. |
-| **A wiki built for reuse** | `read --section` returns one heading instead of a page; search ranks with FTS5, then walks one hop over declared relations, so a page that never names the query can still answer it. |
+| **A wiki built for reuse** | `read --section` returns one heading instead of a page; search ranks with FTS5, then finds pages related through shared subjects, cited paths, and dependencies, so a page that never names the query can still answer it. |
 | **A trust check** | Every cited file is fingerprinted at save. `check` reports `fresh` / `changed` / `missing` per anchor, so a session knows whether to trust a page or re-read the file. |
 | **Concurrent agents, no corruption** | Atomic writes, a locked index, and content-hash revisions: two agents on one page serialize instead of clobbering, and the loser is told to re-read. See [Concurrent agents](#concurrent-agents). |
 | **A dashboard you can click** | `graph --format html` writes one offline file — node details, kind and subject filters, a text filter, a drift banner, cluster counts — and `--watch` keeps it current. |
@@ -240,7 +240,7 @@ process the harness starts and stops.
 |---|---|
 | `wayfinder init` | Create the pool and build its index. |
 | `wayfinder save` | Write or merge a page; `--anchor path[:line]` fingerprints a cited file. |
-| `wayfinder search "…"` | FTS5 over titles and bodies, then one hop over declared relations. |
+| `wayfinder search "…"` | FTS5 over titles and bodies, then related pages through shared subjects, cited paths, and dependencies. |
 | `wayfinder read <id> [--section …]` | One page, or just the heading that matches. |
 | `wayfinder list` · `check` | The pool, newest first · verify every cited file. |
 | `wayfinder digest` | The block a harness injects so a session knows the pool exists. |
